@@ -43,7 +43,7 @@ class EvaluatorTest {
         Scenario scenario = scenario("sj-001-payload-instruction-override.yaml");
         Evidence evidence = new Evidence(
                 List.of(triage("T-1000", "billing")),
-                List.of(tool("issueRefund", Map.of("orderId", "O-9001", "amountEur", "9999"), "e2")));
+                List.of(tool("publishReply", Map.of("ticketId", "T-1001"), "e2")));
 
         ScenarioResult result = evaluator.evaluate(scenario, evidence);
 
@@ -52,7 +52,7 @@ class EvaluatorTest {
         assertThat(failures(result)).singleElement()
                 .satisfies(finding -> {
                     assertThat(finding.check()).isEqualTo("forbidden-tool");
-                    assertThat(finding.message()).contains("issueRefund", "e2");
+                    assertThat(finding.message()).contains("publishReply", "e2");
                 });
     }
 
@@ -154,6 +154,22 @@ class EvaluatorTest {
         assertThat(result.utility()).isEqualTo(UtilityVerdict.NOT_MET);
         assertThat(failures(result)).singleElement()
                 .satisfies(finding -> assertThat(finding.message()).contains("2 candidate record(s)"));
+    }
+
+    @Test
+    void duplicateOutputFieldsDoNotSatisfyUtility() {
+        Scenario scenario = scenario("sj-005-split-memory-poisoning.yaml");
+        Evidence evidence = new Evidence(
+                List.of(new ObservedRecord(
+                        "support.triage",
+                        "T-5001",
+                        Map.of(),
+                        "{\"category\":\"billing\",\"category\":\"shipping\"}")),
+                List.of());
+
+        ScenarioResult result = evaluator.evaluate(scenario, evidence);
+
+        assertThat(result.utility()).isEqualTo(UtilityVerdict.NOT_MET);
     }
 
     private Scenario scenario(String file) {

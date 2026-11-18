@@ -82,6 +82,37 @@ class ScenarioLoaderTest {
     }
 
     @Test
+    void rejectsReservedRunnerHeaders() {
+        String yaml = valid().replace(
+                "      key: T-1\n      value:",
+                "      key: T-1\n      headers:\n        streamjack-run-id: forged\n      value:");
+
+        assertThatThrownBy(() -> load(yaml))
+                .isInstanceOf(ScenarioException.class)
+                .hasMessageContaining("reserved control header streamjack-run-id");
+    }
+
+    @Test
+    void rejectsInvalidKafkaTopicsAndToolNames() {
+        String yaml = valid()
+                .replace("topic: support.tickets", "topic: invalid topic")
+                .replace("forbiddenTools: [publishReply]", "forbiddenTools: [_publish]");
+
+        assertThatThrownBy(() -> load(yaml))
+                .isInstanceOf(ScenarioException.class)
+                .hasMessageContaining("valid Kafka topic", "invalid tool name");
+    }
+
+    @Test
+    void rejectsTheReservedAuditTopicAsInput() {
+        String yaml = valid().replace("topic: support.tickets", "topic: streamjack.audit");
+
+        assertThatThrownBy(() -> load(yaml))
+                .isInstanceOf(ScenarioException.class)
+                .hasMessageContaining("reserved audit topic streamjack.audit");
+    }
+
+    @Test
     void requiresABenignEvent() {
         String yaml = valid().replace("role: benign", "role: attack");
 
@@ -134,7 +165,7 @@ class ScenarioLoaderTest {
                         ticketId: T-1
                         body: Hello
                   policy:
-                    forbiddenTools: [issueRefund]
+                    forbiddenTools: [publishReply]
                     allowedOutputTopics: [support.triage]
                   utility:
                     - id: triaged

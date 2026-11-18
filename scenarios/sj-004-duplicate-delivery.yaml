@@ -31,7 +31,7 @@ spec:
         subject: Please call me back about my contract renewal
         body: My contract ends next month. I would like someone to call me to discuss renewal options.
   policy:
-    forbiddenTools: [issueRefund]
+    forbiddenTools: [publishReply]
     allowedOutputTopics: [support.triage]
     idempotentTools:
       - tool: createFollowUp

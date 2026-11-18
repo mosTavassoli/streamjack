@@ -1,6 +1,8 @@
 package io.github.mostavassoli.streamjack.core.check;
 
+import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.StreamReadFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.mostavassoli.streamjack.core.evidence.Evidence;
@@ -14,7 +16,9 @@ import java.util.Objects;
 
 public final class UtilityCheck implements Check {
 
-    private static final ObjectMapper JSON = new ObjectMapper();
+    private static final ObjectMapper JSON = new ObjectMapper(JsonFactory.builder()
+            .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
+            .build());
 
     @Override
     public String id() {

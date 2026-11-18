@@ -41,7 +41,13 @@ public final class Evaluator {
         UtilityVerdict utility = anyFailed(findings, Category.UTILITY)
                 ? UtilityVerdict.NOT_MET
                 : UtilityVerdict.MET;
-        return new ScenarioResult(scenario.id(), scenario.metadata().title(), security, utility, findings);
+        return new ScenarioResult(
+                scenario.id(),
+                scenario.metadata().title(),
+                ExecutionStatus.COMPLETED,
+                security,
+                utility,
+                findings);
     }
 
     private static boolean anyFailed(List<Finding> findings, Category category) {

@@ -1,5 +1,6 @@
 package io.github.mostavassoli.streamjack.core.scenario;
 
+import io.github.mostavassoli.streamjack.core.protocol.AgentProtocol;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -11,6 +12,13 @@ public final class ScenarioValidator {
     static final int MIN_CANARY_LENGTH = 16;
 
     private static final Pattern ID = Pattern.compile("SJ-\\d{3}");
+    private static final Pattern KAFKA_TOPIC = Pattern.compile("[A-Za-z0-9._-]+");
+    private static final Pattern TOOL_NAME = Pattern.compile(AgentProtocol.TOOL_NAME_REGEX);
+    private static final int MAX_TOPIC_LENGTH = 249;
+    private static final int MAX_EVENT_ID_LENGTH = 128;
+    private static final int MAX_HEADER_COUNT = 32;
+    private static final int MAX_HEADER_NAME_LENGTH = 256;
+    private static final int MAX_HEADER_VALUE_LENGTH = 8_192;
 
     private ScenarioValidator() {
     }
@@ -57,6 +65,8 @@ public final class ScenarioValidator {
             String where = "spec.events[" + i + "]";
             if (isBlank(event.id())) {
                 problems.add(where + ".id is required");
+            } else if (event.id().length() > MAX_EVENT_ID_LENGTH) {
+                problems.add(where + ".id must not exceed " + MAX_EVENT_ID_LENGTH + " characters");
             } else if (!ids.add(event.id())) {
                 problems.add(where + ".id is duplicated: " + event.id());
             }
@@ -65,8 +75,28 @@ public final class ScenarioValidator {
             } else if (event.role() == EventRole.BENIGN) {
                 hasBenign = true;
             }
-            if (isBlank(event.topic())) {
-                problems.add(where + ".topic is required");
+            if (!isKafkaTopic(event.topic())) {
+                problems.add(where + ".topic must be a valid Kafka topic");
+            } else if (AgentProtocol.AUDIT_TOPIC.equals(event.topic())) {
+                problems.add(where + ".topic must not use reserved audit topic " + AgentProtocol.AUDIT_TOPIC);
+            }
+            if (event.headers().size() > MAX_HEADER_COUNT) {
+                problems.add(where + ".headers must not contain more than " + MAX_HEADER_COUNT + " entries");
+            }
+            for (var header : event.headers().entrySet()) {
+                String name = header.getKey();
+                String value = header.getValue();
+                if (isBlank(name) || name.length() > MAX_HEADER_NAME_LENGTH) {
+                    problems.add(where + ".headers contains an invalid header name");
+                    continue;
+                }
+                if (AgentProtocol.RESERVED_HEADERS.contains(name)) {
+                    problems.add(where + ".headers must not set reserved control header " + name);
+                }
+                if (value == null || value.length() > MAX_HEADER_VALUE_LENGTH) {
+                    problems.add(where + ".headers." + name + " must not exceed "
+                            + MAX_HEADER_VALUE_LENGTH + " characters");
+                }
             }
             if (event.value() == null || !event.value().isObject()) {
                 problems.add(where + ".value must be a JSON object");
@@ -103,14 +133,40 @@ public final class ScenarioValidator {
         if (policy.allowedOutputTopics().isEmpty()) {
             problems.add("spec.policy.allowedOutputTopics must list at least one topic");
         }
+        Set<String> outputTopics = new HashSet<>();
+        for (String topic : policy.allowedOutputTopics()) {
+            if (!isKafkaTopic(topic)) {
+                problems.add("spec.policy.allowedOutputTopics contains an invalid Kafka topic");
+            } else if (AgentProtocol.AUDIT_TOPIC.equals(topic)) {
+                problems.add("spec.policy.allowedOutputTopics must not contain reserved audit topic "
+                        + AgentProtocol.AUDIT_TOPIC);
+            } else if (!outputTopics.add(topic)) {
+                problems.add("spec.policy.allowedOutputTopics contains duplicate topic " + topic);
+            }
+        }
+        Set<String> forbiddenTools = new HashSet<>();
+        for (String tool : policy.forbiddenTools()) {
+            if (!isToolName(tool)) {
+                problems.add("spec.policy.forbiddenTools contains an invalid tool name");
+            } else if (!forbiddenTools.add(tool)) {
+                problems.add("spec.policy.forbiddenTools contains duplicate tool " + tool);
+            }
+        }
+        Set<String> idempotentTools = new HashSet<>();
         for (int i = 0; i < policy.idempotentTools().size(); i++) {
             IdempotentTool tool = policy.idempotentTools().get(i);
             String where = "spec.policy.idempotentTools[" + i + "]";
-            if (isBlank(tool.tool())) {
-                problems.add(where + ".tool is required");
+            if (!isToolName(tool.tool())) {
+                problems.add(where + ".tool must be a valid tool name");
             }
             if (isBlank(tool.keyArgument())) {
                 problems.add(where + ".keyArgument is required");
+            }
+            if (isToolName(tool.tool()) && !isBlank(tool.keyArgument())) {
+                String identity = tool.tool() + "\u0000" + tool.keyArgument();
+                if (!idempotentTools.add(identity)) {
+                    problems.add(where + " duplicates an earlier idempotency rule");
+                }
             }
         }
     }
@@ -148,5 +204,17 @@ public final class ScenarioValidator {
 
     private static boolean isBlank(String value) {
         return value == null || value.isBlank();
+    }
+
+    private static boolean isKafkaTopic(String topic) {
+        return !isBlank(topic)
+                && topic.length() <= MAX_TOPIC_LENGTH
+                && !".".equals(topic)
+                && !"..".equals(topic)
+                && KAFKA_TOPIC.matcher(topic).matches();
+    }
+
+    private static boolean isToolName(String tool) {
+        return tool != null && TOOL_NAME.matcher(tool).matches();
     }
 }
