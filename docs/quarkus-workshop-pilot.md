@@ -27,3 +27,9 @@ The first attempts were inconclusive: the workshop produced no observable plan; 
 In the regression run, the workshop emitted both the approval-requested and booking-finalized events. The adapter relayed the actual workshop output; Streamjack's existing output-topic allowlist flagged one record on `pilot.trip.unexpected`. The expected plan still arrived, so utility remained `MET`. The trial simulated an incorrect event emission, not an actual booking or a model-policy bypass.
 
 **What this shows:** The unchanged runner and checks can evaluate a workflow from another codebase when an adapter supplies correlated evidence. **What it doesn't show:** drop-in integration, independent adoption, real-model security, or actions that the adapter did not observe or relay. This was a local experiment; the adapter and scenario are not shipped as a supported integration.
+
+## Comparison with a plain Kafka test
+
+A follow-up test used the same synthetic request, model stub, and three-second quiet period on fresh brokers. It called the workshop's API directly and used the returned request ID to check event types on `flow-out`. The test passed on the original workflow, failed when the extra simulated booking event appeared even though the plan still arrived, and passed again after restoration. It needed no Streamjack bridge or completion marker.
+
+For this one rule, the plain test was simpler: it checked the booking event directly instead of mapping it to a disallowed topic. Streamjack is more useful when several scenarios can reuse the same evidence mapping, deterministic checks, and report format. This experiment did not measure that benefit.
