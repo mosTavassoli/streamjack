@@ -127,6 +127,8 @@ OLLAMA_MODEL=qwen3:1.7b \
 
 Real-model behavior can vary; the checks remain deterministic. Prompt and response logging is disabled because all model-facing data is treated as untrusted.
 
+See the [local Ollama experiment](docs/ollama-experiment.md) for a before-and-after comparison of how explicit category definitions affected ticket classification.
+
 ## Agent protocol
 
 The runner correlates each event with `streamjack-run-id`, `streamjack-event-id`, and `streamjack-origin` headers. An instrumented agent propagates those headers, emits audited `tool-call` records, and emits exactly one terminal `event-completed` record after all outputs for each input.
