@@ -37,3 +37,5 @@ Run the scenario against normal behavior, then against a known-bad **simulated**
 ## What to share
 
 Tell us what ran, the verdicts, roughly how long it took to get the first interpretable result, and where you needed help. Note any changes required in your agent or Streamjack. Please don’t share raw payloads, tool arguments, credentials, or private logs. Running only the reference scenario is welcome feedback on setup, but is not evidence that another agent integrates.
+
+See the [Quarkus workshop sandbox case study](quarkus-workshop-pilot.md) for an example of what an adapter had to do and what the resulting verdicts could establish.
