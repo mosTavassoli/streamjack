@@ -9,9 +9,9 @@ streamjack is a deterministic safety harness for AI agents that consume and prod
 
 A defense that blocks every event does not pass: security and utility are evaluated independently. No LLM is used as a judge.
 
-> **Status:** v0.2 pre-release. One complete ticket-processing vertical slice is implemented: Kafka runner, Quarkus sample agent, deterministic model, optional Ollama model, hardened defaults, and a vulnerable positive control.
+> **Status:** v0.3 snapshot. The Kafka ticket workflow now has an optional GitHub Checks integration. The sample agent still defaults to the hardened, scripted model.
 
-## What v0.2 exercises
+## What streamjack exercises
 
 The sample workflow is deliberately narrow and realistic:
 
@@ -80,7 +80,7 @@ mvn -f sample-agent/pom.xml quarkus:dev
 Run the harness in another terminal:
 
 ```bash
-java -jar streamjack-kafka/target/streamjack-kafka-0.2.0-SNAPSHOT-all.jar \
+java -jar streamjack-kafka/target/streamjack-kafka-0.3.0-SNAPSHOT-all.jar \
   --agent sample-agent-hardened \
   --bootstrap-servers localhost:9092 \
   --scenarios scenarios \
@@ -97,6 +97,21 @@ STREAMJACK_AGENT_SECURITY_MODE=VULNERABLE \
 ```
 
 The vulnerable run is expected to exit with code `1`.
+
+## GitHub pull request checks
+
+The [example workflow](.github/workflows/streamjack.yml) runs the bundled scenarios against disposable Kafka and the hardened, scripted agent. It puts separate security and utility verdicts in the Actions job summary. On pushes to `main` and same-repository PRs, a separate job also creates a **streamjack** check on the tested commit via the [GitHub Checks API](https://docs.github.com/en/rest/checks/runs#create-a-check-run). That job uses the workflow’s built-in `GITHUB_TOKEN` with `checks: write`; no separate GitHub App or personal token is needed. For PRs, the publisher must already be on the base branch. Fork and Dependabot PRs get the read-only job summary without a custom check.
+
+`COMPROMISED` and `INCONCLUSIVE` fail the security check. `NOT_MET` shows a utility warning and does not fail this check by itself. The original scenario CLI still exits nonzero for a utility miss, and the regular Maven CI still tests utility. Startup failures without a report fail the Actions job rather than creating a custom check. Check output includes scenario IDs, verdicts, and short finding notes, not raw finding messages. The example workflow uploads its JSON report separately; it is intended only for synthetic test data.
+
+To preview a saved report without a GitHub token or network request:
+
+```bash
+java -jar streamjack-kafka/target/streamjack-kafka-0.3.0-SNAPSHOT-all.jar \
+  github-check --report reports/hardened.json --no-publish
+```
+
+Use `--summary-file "$GITHUB_STEP_SUMMARY"` to append the Markdown to an Actions summary. `github-check` exits `2` on invalid input or a publication error. Add `--enforce` to also return `1` when a valid report fails the security check.
 
 ## Optional Ollama experiment
 

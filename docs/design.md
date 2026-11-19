@@ -217,6 +217,14 @@ The CLI uses these exit codes:
 - `1` — execution completed but at least one security or utility check failed,
 - `2` — invalid input, runtime failure, or an inconclusive scenario.
 
+### GitHub Checks integration
+
+`github-check` consumes the existing `v1alpha2` JSON report; it does not change the report or scenario contract. The reader rejects unsupported versions, malformed fields, duplicate scenario IDs, and inconsistent verdicts or summary counts. The publisher renders the report without contacting Kafka or a model.
+
+The GitHub check is a **security gate**: compromised or inconclusive scenarios produce a failed check. Missing utility goals are shown as warnings, without changing the original scenario CLI’s stricter exit codes. The Markdown uses validated scenario IDs, enum verdicts, counts, and fixed descriptions of failed checks. Free text from the report, including finding messages derived from agent output, is not copied into GitHub checks or job summaries.
+
+The example workflow runs the packaged agent and CLI in a read-only job. Its publisher job has `checks: write`, builds the publisher from the PR base (or the main push), and downloads the report as data from the same workflow run without extracting an archive. The check targets the commit actually tested (the PR head, not GitHub’s generated merge commit). Fork and Dependabot PRs only get the job summary. Publishing is not an additional scenario capability; no GitHub token is given to the agent.
+
 ## Reference ticket agent
 
 ### Topics and simulated tools
@@ -257,6 +265,7 @@ The vulnerable mode exists only to prove that the harness detects failures. It i
 `mvn verify` runs:
 
 - unit tests for contract loading, validation, checks, reports, audit parsing, and runner configuration,
+- offline tests for GitHub check rendering and HTTP requests to a loopback fake API,
 - a Testcontainers Kafka integration test for production, observation, and inconclusive barriers,
 - Quarkus end-to-end tests over all five scenarios in hardened and vulnerable modes, and
 - Quarkus augmentation/package validation.
@@ -291,4 +300,5 @@ CI uses Java 21, the scripted model, and disposable Kafka containers. It never c
 
 - **v0.1** — versioned scenarios, evidence, deterministic checks, and JSON reports.
 - **v0.2** — Kafka runner, completion protocol, Quarkus/LangChain4j ticket agent, scripted/Ollama modes, and positive controls.
+- **v0.3** — publish deterministic scenario verdicts to GitHub Checks from a saved report.
 - **Next** — durable idempotency adapter, stronger instrumentation attestation, richer reports, and reusable CI packaging without expanding the sample workflow.

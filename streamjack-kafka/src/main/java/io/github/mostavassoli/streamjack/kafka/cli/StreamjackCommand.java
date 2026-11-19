@@ -13,6 +13,7 @@ import io.github.mostavassoli.streamjack.kafka.RunnerConfiguration;
 import io.github.mostavassoli.streamjack.kafka.ScenarioExecution;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.PrintWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -22,14 +23,19 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.Callable;
 import picocli.CommandLine.Command;
+import picocli.CommandLine.Model.CommandSpec;
 import picocli.CommandLine.Option;
+import picocli.CommandLine.Spec;
 
 @Command(
         name = "streamjack",
         mixinStandardHelpOptions = true,
-        version = "streamjack 0.2.0-SNAPSHOT",
+        version = Streamjack.VERSION,
         description = "Test a Kafka-connected AI agent with versioned security scenarios.")
 final class StreamjackCommand implements Callable<Integer> {
+
+    @Spec
+    private CommandSpec spec;
 
     @Option(
             names = "--bootstrap-servers",
@@ -43,7 +49,8 @@ final class StreamjackCommand implements Callable<Integer> {
             description = "Scenario YAML file or directory (default: ${DEFAULT-VALUE})")
     private Path scenarios;
 
-    @Option(names = "--agent", required = true, description = "Name of the agent under test")
+    // Validated in call(): a picocli-required option here would also be demanded by subcommands.
+    @Option(names = "--agent", description = "Name of the agent under test (required to run scenarios)")
     private String agent;
 
     @Option(
@@ -84,9 +91,10 @@ final class StreamjackCommand implements Callable<Integer> {
 
     @Override
     public Integer call() {
+        PrintWriter out = spec.commandLine().getOut();
         try {
             if (agent == null || agent.isBlank()) {
-                throw new IllegalArgumentException("--agent must not be blank");
+                throw new IllegalArgumentException("--agent is required");
             }
             RunnerConfiguration configuration = new RunnerConfiguration(
                     bootstrapServers,
@@ -104,14 +112,14 @@ final class StreamjackCommand implements Callable<Integer> {
             for (Scenario scenario : loaded) {
                 ScenarioExecution execution = runner.run(scenario);
                 results.add(execution.result());
-                print(execution);
+                print(out, execution);
             }
             RunReport runReport = RunReport.of(agent, results);
             new ReportWriter().write(runReport, report);
-            System.out.println("Report: " + report.toAbsolutePath());
+            out.println("Report: " + report.toAbsolutePath());
             return exitCode(results);
         } catch (RuntimeException | IOException e) {
-            System.err.println("streamjack: " + e.getMessage());
+            spec.commandLine().getErr().println("streamjack: " + e.getMessage());
             return 2;
         }
     }
@@ -137,9 +145,9 @@ final class StreamjackCommand implements Callable<Integer> {
                         entry -> entry.getKey().toString(), Map.Entry::getValue));
     }
 
-    private static void print(ScenarioExecution execution) {
+    private static void print(PrintWriter out, ScenarioExecution execution) {
         ScenarioResult result = execution.result();
-        System.out.printf(
+        out.printf(
                 "%-7s  %-12s  %-12s  %-12s  %d ms%n",
                 result.scenarioId(),
                 result.execution(),
