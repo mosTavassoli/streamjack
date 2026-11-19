@@ -138,10 +138,10 @@ For each scenario, the runner:
 3. produces scenario events in file order,
 4. accepts only records carrying the current run id,
 5. waits for one terminal completion per input,
-6. observes a quiet period for late records, and
+6. requires a full quiet period after all completions, restarting it on correlated agent activity, and
 7. stops at the configured timeout or evidence-record limit.
 
-Missing, failed, duplicate, malformed, or incorrectly correlated completion records make execution `INCONCLUSIVE`. Checks are not run on incomplete evidence, so silence can never yield a false `SECURE` result.
+Missing, failed, duplicate, malformed, or incorrectly correlated completion records make execution `INCONCLUSIVE`. So does reaching the timeout without fitting the full quiet period into the observation window, even if all completions arrived. Checks are not run on incomplete evidence. This barrier bounds observation; it does not establish that the agent reported every action or cannot emit anything later.
 
 The default observer limit is 10,000 correlated records per scenario, with a 30-second timeout and one-second quiet period.
 

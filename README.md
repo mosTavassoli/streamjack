@@ -133,7 +133,7 @@ See the [local Ollama experiment](docs/ollama-experiment.md) for a before-and-af
 
 The runner correlates each event with `streamjack-run-id`, `streamjack-event-id`, and `streamjack-origin` headers. An instrumented agent propagates those headers, emits audited `tool-call` records, and emits exactly one terminal `event-completed` record after all outputs for each input.
 
-A missing, failed, malformed, or duplicate completion produces `INCONCLUSIVE`; it can never be reported as `SECURE`. See [docs/design.md](docs/design.md) for the schemas and trust boundaries.
+A missing, failed, malformed, or duplicate completion produces `INCONCLUSIVE`. The result is also `INCONCLUSIVE` if the observation times out before the full quiet period after the last correlated agent record, even when every completion arrived. See [docs/design.md](docs/design.md) for the schemas and trust boundaries.
 
 ## Safety
 

@@ -78,12 +78,13 @@ public final class KafkaScenarioRunner {
                 .map(ScenarioEvent::id)
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
 
+        boolean quietPeriodCompleted;
         try (KafkaConsumer<String, String> consumer = new KafkaConsumer<>(consumerProperties());
                 KafkaProducer<String, String> producer = new KafkaProducer<>(producerProperties())) {
             consumer.subscribe(ALL_NON_INTERNAL_TOPICS);
             awaitAssignmentAndSeekToEnd(consumer);
             produceScenario(producer, scenario, runId);
-            collectEvidence(
+            quietPeriodCompleted = collectEvidence(
                     consumer,
                     runId,
                     expectedEvents,
@@ -105,6 +106,9 @@ public final class KafkaScenarioRunner {
                     scenario.id(),
                     scenario.metadata().title(),
                     "Timed out waiting for completion of event(s) " + missing);
+        } else if (!quietPeriodCompleted) {
+            result = ScenarioResult.inconclusive(
+                    scenario.id(), scenario.metadata().title(), "Timed out before the observation quiet period completed");
         } else {
             result = evaluator.evaluate(scenario, evidence);
         }
@@ -173,7 +177,7 @@ public final class KafkaScenarioRunner {
         producer.flush();
     }
 
-    private void collectEvidence(
+    private boolean collectEvidence(
             KafkaConsumer<String, String> consumer,
             String runId,
             Set<String> expectedEvents,
@@ -181,12 +185,21 @@ public final class KafkaScenarioRunner {
             List<ObservedRecord> outputRecords,
             List<ToolCall> toolCalls,
             List<String> protocolProblems) {
-        Instant deadline = Instant.now().plus(configuration.observationTimeout());
-        Instant quietSince = null;
+        long started = System.nanoTime();
+        Duration timeout = configuration.observationTimeout();
+        Duration quietUntil = null;
         int evidenceRecords = 0;
 
-        while (Instant.now().isBefore(deadline)) {
-            ConsumerRecords<String, String> records = consumer.poll(POLL_INTERVAL);
+        while (true) {
+            Duration elapsed = Duration.ofNanos(System.nanoTime() - started);
+            if (quietUntil != null && quietUntil.compareTo(timeout) <= 0 && elapsed.compareTo(quietUntil) >= 0) {
+                return true;
+            }
+            if (elapsed.compareTo(timeout) >= 0) {
+                return false;
+            }
+            Duration nextBoundary = quietUntil == null ? timeout : min(quietUntil, timeout);
+            ConsumerRecords<String, String> records = consumer.poll(min(POLL_INTERVAL, nextBoundary.minus(elapsed)));
             boolean matchingActivity = false;
             for (ConsumerRecord<String, String> record : records) {
                 if (!hasHeaderValue(record.headers(), AgentProtocol.RUN_ID_HEADER, runId)) {
@@ -201,7 +214,7 @@ public final class KafkaScenarioRunner {
                 evidenceRecords++;
                 if (evidenceRecords > configuration.maxEvidenceRecords()) {
                     protocolProblems.add("Evidence limit of " + configuration.maxEvidenceRecords() + " records exceeded");
-                    return;
+                    return false;
                 }
                 String correlationProblem = correlationProblem(record.headers(), runId, expectedEvents);
                 if (correlationProblem != null) {
@@ -216,15 +229,8 @@ public final class KafkaScenarioRunner {
                 }
             }
 
-            if (matchingActivity) {
-                quietSince = null;
-            }
-            if (terminalEvents.containsAll(expectedEvents)) {
-                if (quietSince == null) {
-                    quietSince = Instant.now();
-                } else if (!Instant.now().isBefore(quietSince.plus(configuration.quietPeriod()))) {
-                    return;
-                }
+            if (terminalEvents.containsAll(expectedEvents) && (matchingActivity || quietUntil == null)) {
+                quietUntil = Duration.ofNanos(System.nanoTime() - started).plus(configuration.quietPeriod());
             }
         }
     }

@@ -74,6 +74,27 @@ class KafkaScenarioRunnerIT {
     }
 
     @Test
+    void completionWithoutAFullQuietPeriodIsInconclusive() {
+        Scenario scenario = loader.load(Path.of("..", "scenarios", "sj-001-payload-instruction-override.yaml"));
+        Duration timeout = Duration.ofSeconds(8);
+        // Leave no practical time to observe the completions and then fit the quiet period.
+        RunnerConfiguration configuration = new RunnerConfiguration(
+                KAFKA.getBootstrapServers(), timeout, timeout.minusNanos(1), 100, true, Map.of());
+
+        try (FakeTicketAgent agent = new FakeTicketAgent(KAFKA.getBootstrapServers())) {
+            assertThat(agent.isRunning()).isTrue();
+            ScenarioExecution execution = new KafkaScenarioRunner(configuration).run(scenario);
+
+            assertThat(execution.evidence().outputRecords()).hasSize(2);
+            assertThat(execution.result().execution()).isEqualTo(ExecutionStatus.INCONCLUSIVE);
+            assertThat(execution.result().security()).isEqualTo(SecurityVerdict.INCONCLUSIVE);
+            assertThat(execution.result().utility()).isEqualTo(UtilityVerdict.INCONCLUSIVE);
+            assertThat(execution.result().findings()).singleElement()
+                    .satisfies(finding -> assertThat(finding.message()).contains("Timed out", "quiet period"));
+        }
+    }
+
+    @Test
     void failedCompletionIsInconclusiveRatherThanSecure() {
         Scenario scenario = loader.load(Path.of("..", "scenarios", "sj-001-payload-instruction-override.yaml"));
         RunnerConfiguration configuration = new RunnerConfiguration(
