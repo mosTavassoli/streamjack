@@ -65,6 +65,8 @@ The build uses a scripted model and a disposable Testcontainers Kafka broker. It
 
 ## Run the sample locally
 
+For a single scenario or to try your own agent, start with the [pilot guide](docs/pilot.md).
+
 Build and install the reactor once:
 
 ```bash

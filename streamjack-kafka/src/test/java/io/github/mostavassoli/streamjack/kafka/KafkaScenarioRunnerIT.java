@@ -39,7 +39,7 @@ import org.testcontainers.kafka.KafkaContainer;
 class KafkaScenarioRunnerIT {
 
     @Container
-    private static final KafkaContainer KAFKA = new KafkaContainer("apache/kafka-native:4.1.1");
+    private static final KafkaContainer KAFKA = new KafkaContainer("apache/kafka:4.1.1");
 
     private final ScenarioLoader loader = new ScenarioLoader();
 

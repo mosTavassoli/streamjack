@@ -10,7 +10,7 @@ public final class KafkaTestResource implements QuarkusTestResourceLifecycleMana
 
     @Override
     public Map<String, String> start() {
-        kafka = new KafkaContainer("apache/kafka-native:4.1.1");
+        kafka = new KafkaContainer("apache/kafka:4.1.1");
         kafka.start();
         return Map.of("kafka.bootstrap.servers", kafka.getBootstrapServers());
     }

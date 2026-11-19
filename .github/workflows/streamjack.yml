@@ -22,9 +22,15 @@ jobs:
       report-id: ${{ steps.report.outputs.artifact-id }}
     services:
       kafka:
-        image: apache/kafka-native:4.1.1
+        image: apache/kafka:4.1.1
         ports:
           - 127.0.0.1:9092:9092
+        options: >-
+          --health-cmd="/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092"
+          --health-interval=5s
+          --health-timeout=8s
+          --health-retries=12
+          --health-start-period=10s
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
