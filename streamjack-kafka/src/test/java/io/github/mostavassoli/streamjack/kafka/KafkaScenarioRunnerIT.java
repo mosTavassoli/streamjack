@@ -29,6 +29,8 @@ import org.apache.kafka.common.header.internals.RecordHeaders;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.kafka.KafkaContainer;
@@ -100,7 +102,7 @@ class KafkaScenarioRunnerIT {
         RunnerConfiguration configuration = new RunnerConfiguration(
                 KAFKA.getBootstrapServers(), Duration.ofSeconds(10), Duration.ofMillis(100), 100, true, Map.of());
 
-        try (FakeTicketAgent agent = new FakeTicketAgent(KAFKA.getBootstrapServers(), true)) {
+        try (FakeTicketAgent agent = new FakeTicketAgent(KAFKA.getBootstrapServers(), CompletionMode.FAILED)) {
             assertThat(agent.isRunning()).isTrue();
             ScenarioExecution execution = new KafkaScenarioRunner(configuration).run(scenario);
 
@@ -112,19 +114,51 @@ class KafkaScenarioRunnerIT {
         }
     }
 
+    @ParameterizedTest
+    @CsvSource({
+        "DUPLICATE, duplicate event-completed record for event e1",
+        "TRAILING_JSON, audit record is not valid JSON",
+        "MISMATCHED_HEADER, event-completed sourceEventId does not match its Kafka header"
+    })
+    void invalidCompletionIsInconclusiveRatherThanSecure(CompletionMode mode, String diagnostic) {
+        Scenario scenario = loader.load(Path.of("..", "scenarios", "sj-001-payload-instruction-override.yaml"));
+        RunnerConfiguration configuration = new RunnerConfiguration(
+                KAFKA.getBootstrapServers(), Duration.ofSeconds(8), Duration.ofMillis(300), 100, true, Map.of());
+
+        try (FakeTicketAgent agent = new FakeTicketAgent(KAFKA.getBootstrapServers(), mode)) {
+            assertThat(agent.isRunning()).isTrue();
+            ScenarioExecution execution = new KafkaScenarioRunner(configuration).run(scenario);
+
+            assertThat(execution.evidence().outputRecords()).hasSize(2);
+            assertThat(execution.result().execution()).isEqualTo(ExecutionStatus.INCONCLUSIVE);
+            assertThat(execution.result().security()).isEqualTo(SecurityVerdict.INCONCLUSIVE);
+            assertThat(execution.result().utility()).isEqualTo(UtilityVerdict.INCONCLUSIVE);
+            assertThat(execution.result().findings()).singleElement()
+                    .satisfies(finding -> assertThat(finding.message()).contains(diagnostic));
+        }
+    }
+
+    private enum CompletionMode {
+        PROCESSED,
+        FAILED,
+        DUPLICATE,
+        TRAILING_JSON,
+        MISMATCHED_HEADER
+    }
+
     private static final class FakeTicketAgent implements AutoCloseable {
 
         private final AtomicBoolean running = new AtomicBoolean(true);
         private final ExecutorService executor = Executors.newSingleThreadExecutor();
         private final Future<?> task;
-        private final boolean fail;
+        private final CompletionMode completionMode;
 
         private FakeTicketAgent(String bootstrapServers) {
-            this(bootstrapServers, false);
+            this(bootstrapServers, CompletionMode.PROCESSED);
         }
 
-        private FakeTicketAgent(String bootstrapServers, boolean fail) {
-            this.fail = fail;
+        private FakeTicketAgent(String bootstrapServers, CompletionMode completionMode) {
+            this.completionMode = completionMode;
             task = executor.submit(() -> run(bootstrapServers));
         }
 
@@ -149,18 +183,20 @@ class KafkaScenarioRunnerIT {
                                         "{\"ticketId\":\"" + record.key() + "\",\"category\":\"" + category + "\"}",
                                         headers))
                                 .get();
-                        String completion = fail
+                        String completion = completionMode == CompletionMode.FAILED
                                 ? "{\"kind\":\"event-completed\",\"sourceEventId\":\"" + eventId
                                         + "\",\"status\":\"failed\",\"errorCode\":\"TEST_FAILURE\"}"
                                 : "{\"kind\":\"event-completed\",\"sourceEventId\":\"" + eventId
                                         + "\",\"status\":\"processed\"}";
-                        producer.send(new ProducerRecord<>(
-                                        AgentProtocol.AUDIT_TOPIC,
-                                        null,
-                                        record.key(),
-                                        completion,
-                                        correlatedHeaders(runId, eventId)))
-                                .get();
+                        if ("e1".equals(eventId)) {
+                            switch (completionMode) {
+                                case DUPLICATE -> sendCompletion(producer, record.key(), runId, eventId, completion);
+                                case TRAILING_JSON -> completion += " {}";
+                                case MISMATCHED_HEADER -> sendCompletion(producer, record.key(), runId, "e2", completion);
+                                default -> { }
+                            }
+                        }
+                        sendCompletion(producer, record.key(), runId, eventId, completion);
                     }
                 }
             } catch (InterruptedException e) {
@@ -168,6 +204,14 @@ class KafkaScenarioRunnerIT {
             } catch (Exception e) {
                 throw new IllegalStateException(e);
             }
+        }
+
+        private static void sendCompletion(
+                KafkaProducer<String, String> producer, String key, String runId, String eventId, String completion)
+                throws java.util.concurrent.ExecutionException, InterruptedException {
+            producer.send(new ProducerRecord<>(
+                            AgentProtocol.AUDIT_TOPIC, null, key, completion, correlatedHeaders(runId, eventId)))
+                    .get();
         }
 
         @Override

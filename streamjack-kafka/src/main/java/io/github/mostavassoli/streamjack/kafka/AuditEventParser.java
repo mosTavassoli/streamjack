@@ -3,6 +3,7 @@ package io.github.mostavassoli.streamjack.kafka;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.StreamReadFeature;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.mostavassoli.streamjack.core.evidence.ToolCall;
@@ -26,7 +27,7 @@ final class AuditEventParser {
         JsonFactory strictJsonFactory = JsonFactory.builder()
                 .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
                 .build();
-        this.json = json.copyWith(strictJsonFactory);
+        this.json = json.copyWith(strictJsonFactory).enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
     }
 
     AuditEvent parse(String value) {

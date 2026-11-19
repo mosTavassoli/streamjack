@@ -126,7 +126,7 @@ An agent that cannot process an event emits a non-sensitive machine code:
 }
 ```
 
-Audit records reject unknown fields. `errorCode` is restricted to `[A-Z][A-Z0-9_]{0,63}` so an exception message or secret cannot be copied into it.
+Each audit record must contain exactly one JSON object, with no trailing tokens or unknown fields. `errorCode` is restricted to `[A-Z][A-Z0-9_]{0,63}` so an exception message or secret cannot be copied into it.
 Tool names must match `[A-Za-z][A-Za-z0-9_.-]{0,127}`.
 
 ### Collection barrier
