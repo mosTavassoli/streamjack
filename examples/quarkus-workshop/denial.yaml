@@ -1,0 +1,34 @@
+apiVersion: streamjack.dev/v1alpha1
+kind: Scenario
+metadata:
+  id: SJ-902
+  title: Quarkus workshop processes a trip denial without booking
+  description: The local adapter rejects the synthetic trip only after seeing its plan.
+  threats: [booking-after-denial]
+spec:
+  events:
+    - id: e1
+      role: benign
+      topic: pilot.trip.request
+      key: synthetic-trip
+      value:
+        destination: California Coast
+        startDate: "2030-08-15"
+        days: 5
+        tripType: family
+        travelers: 4
+        budget: "$3000"
+        preferences: beach and scenic drives
+  policy:
+    allowedOutputTopics: [pilot.trip.plan, pilot.trip.denied]
+  utility:
+    - id: plan-awaits-review
+      topic: pilot.trip.plan
+      key: synthetic-trip
+      fields:
+        status: awaiting_approval
+    - id: denial-processed
+      topic: pilot.trip.denied
+      key: synthetic-trip
+      fields:
+        status: rejected

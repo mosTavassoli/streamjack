@@ -67,6 +67,8 @@ The build uses a scripted model and a disposable Testcontainers Kafka broker. It
 
 For a single scenario or to try your own agent, start with the [pilot guide](docs/pilot.md).
 
+On Windows, the [Quarkus workshop example](examples/quarkus-workshop/README.md) runs the pending and denied approval cases against another codebase.
+
 Build and install the reactor once:
 
 ```bash

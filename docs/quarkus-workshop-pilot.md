@@ -26,7 +26,9 @@ The first attempts were inconclusive: the workshop produced no observable plan; 
 
 In the regression run, the workshop emitted both the approval-requested and booking-finalized events. The adapter relayed the actual workshop output; Streamjack's existing output-topic allowlist flagged one record on `pilot.trip.unexpected`. The expected plan still arrived, so utility remained `MET`. The trial simulated an incorrect event emission, not an actual booking or a model-policy bypass.
 
-**What this shows:** The unchanged runner and checks can evaluate a workflow from another codebase when an adapter supplies correlated evidence. **What it doesn't show:** drop-in integration, independent adoption, real-model security, or actions that the adapter did not observe or relay. This was a local experiment; the adapter and scenario are not shipped as a supported integration.
+**What this shows:** The unchanged runner and checks can evaluate a workflow from another codebase when an adapter supplies correlated evidence. **What it doesn't show:** drop-in integration, independent adoption, real-model security, or actions that the adapter did not observe or relay.
+
+A [runnable Windows example](../examples/quarkus-workshop/README.md) now covers the original pending case (`SJ-901`) and an explicit denial (`SJ-902`) through one adapter. In the denial case, the workshop accepted the decision through its normal API, then published a matching rejection. Both cases completed with `SECURE / MET`. The deliberately modified workflow from the earlier regression run is not part of the runnable example.
 
 ## Comparison with a plain Kafka test
 
