@@ -40,4 +40,4 @@ Tell us what ran, the verdicts, roughly how long it took to get the first interp
 
 See the [Quarkus workshop sandbox case study](quarkus-workshop-pilot.md) for an example of what an adapter had to do and what the resulting verdicts could establish.
 
-To run the workshop's pending and denial cases yourself, use the [runnable Windows example](../examples/quarkus-workshop/README.md).
+To run the workshop's pending, denial, and approval cases yourself, use the [runnable Windows example](../examples/quarkus-workshop/README.md).

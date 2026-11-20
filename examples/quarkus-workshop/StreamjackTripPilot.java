@@ -14,6 +14,7 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.header.internals.RecordHeaders;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
@@ -26,10 +27,15 @@ class StreamjackTripPilot {
     private static final ObjectMapper JSON = new ObjectMapper();
 
     public static void main(String[] args) throws Exception {
-        if (args.length != 1 || !List.of("pending", "denial").contains(args[0])) {
-            throw new IllegalArgumentException("Expected pending or denial");
+        if (args.length != 1) {
+            throw new IllegalArgumentException("Expected pending, denial, or approval");
         }
-        boolean deny = args[0].equals("denial");
+        String decisionStatus = switch (args[0]) {
+            case "pending" -> null;
+            case "denial" -> "rejected";
+            case "approval" -> "approved";
+            default -> throw new IllegalArgumentException("Expected pending, denial, or approval");
+        };
         var producerSettings = new Properties();
         producerSettings.setProperty("bootstrap.servers", "127.0.0.1:9092");
         var consumerSettings = new Properties();
@@ -44,7 +50,10 @@ class StreamjackTripPilot {
             ConsumerRecord<String, String> input = null;
             String requestId = null;
             String instanceId = null;
+            boolean planObserved = false;
             boolean decisionAccepted = false;
+            boolean terminalObserved = false;
+            long decisionOffset = Long.MAX_VALUE;
             while (true) {
                 for (var record : consumer.poll(Duration.ofMillis(200))) {
                     if (INPUT.equals(record.topic())) {
@@ -63,35 +72,57 @@ class StreamjackTripPilot {
                         }
                     } else if (input != null) {
                         var output = JSON.readTree(record.value());
-                        if (!requestId.equals(output.path("requestId").asText())) {
+                        boolean sameRequest = requestId.equals(output.path("requestId").asText());
+                        boolean sameFlow = instanceId.equals(header(record, "ce_flowinstanceid"));
+                        if (!sameRequest && !sameFlow) {
                             continue;
                         }
                         String type = header(record, "ce_type");
-                        boolean sameInstance = instanceId.equals(output.path("instanceId").asText())
-                                && instanceId.equals(header(record, "ce_flowinstanceid"));
-                        boolean planned = sameInstance && "com.tripplanner.trip.approval.requested".equals(type)
+                        boolean sameInstance = sameRequest && sameFlow
+                                && instanceId.equals(output.path("instanceId").asText());
+                        boolean planned = sameInstance && !planObserved && !terminalObserved
+                                && "com.tripplanner.trip.approval.requested".equals(type)
                                 && "awaiting_approval".equals(output.path("status").asText())
                                 && output.path("plan").isObject();
-                        boolean rejected = deny && decisionAccepted && sameInstance
+                        boolean awaitingOutcome = sameInstance && decisionAccepted && !terminalObserved
+                                && record.offset() >= decisionOffset;
+                        boolean rejected = awaitingOutcome && "rejected".equals(decisionStatus)
                                 && "com.tripplanner.trip.rejected".equals(type)
                                 && "rejected".equals(output.path("status").asText())
                                 && output.path("confirmation").isNull();
-                        String topic = planned ? "pilot.trip.plan" : rejected ? "pilot.trip.denied" : "pilot.trip.unexpected";
+                        var bookingReference = output.path("confirmation").path("bookingReference");
+                        boolean confirmed = awaitingOutcome && "approved".equals(decisionStatus)
+                                && "com.tripplanner.booking.finalized".equals(type)
+                                && "confirmed".equals(output.path("status").asText())
+                                && bookingReference.isTextual() && !bookingReference.textValue().isBlank();
+                        // Extra outcomes remain evidence, even after the sole completion marker.
+                        String topic = planned ? "pilot.trip.plan"
+                                : rejected ? "pilot.trip.denied"
+                                : confirmed ? "pilot.trip.confirmed" : "pilot.trip.unexpected";
                         relay(producer, input, topic, record.value());
                         System.out.println("Observed workshop event: " + type);
-                        if (deny && planned && !decisionAccepted) {
+                        if (planned) {
+                            planObserved = true;
+                        }
+                        if (planned && decisionStatus != null) {
+                            // flow-out has one partition. Records already on the broker cannot
+                            // satisfy the decision case, even if this poll delivers them later.
+                            var outputPartition = new TopicPartition(record.topic(), record.partition());
+                            decisionOffset = consumer.endOffsets(List.of(outputPartition), Duration.ofSeconds(5))
+                                    .get(outputPartition);
                             var decision = JSON.createObjectNode().put("instanceId", instanceId)
-                                    .put("status", "rejected").put("reason", "Sandbox denial");
+                                    .put("status", decisionStatus).put("reason", "Sandbox decision");
                             var response = send(http, "PUT", "/trip/approve", decision.toString(), 10, 202);
                             if (!instanceId.equals(response.path("instanceId").asText())
                                     || !requestId.equals(response.path("requestId").asText())
                                     || !"decision_submitted".equals(response.path("status").asText())) {
-                                throw new IllegalStateException("Denial not accepted for this trip");
+                                throw new IllegalStateException("Decision not accepted for this trip");
                             }
                             decisionAccepted = true;
                         }
-                        boolean completed = deny ? rejected : planned;
-                        if (completed || "com.tripplanner.trip.failed".equals(type)) {
+                        boolean completed = decisionStatus == null ? planned : rejected || confirmed;
+                        boolean failed = sameInstance && "com.tripplanner.trip.failed".equals(type);
+                        if (!terminalObserved && (completed || failed)) {
                             var completion = JSON.createObjectNode().put("kind", "event-completed")
                                     .put("sourceEventId", header(input, EVENT))
                                     .put("status", completed ? "processed" : "failed");
@@ -99,6 +130,7 @@ class StreamjackTripPilot {
                                 completion.put("errorCode", "WORKSHOP_FLOW_FAILED");
                             }
                             relay(producer, input, "streamjack.audit", completion.toString());
+                            terminalObserved = true;
                         }
                     }
                 }

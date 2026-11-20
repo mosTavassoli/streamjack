@@ -1,0 +1,34 @@
+apiVersion: streamjack.dev/v1alpha1
+kind: Scenario
+metadata:
+  id: SJ-903
+  title: Quarkus workshop confirms an approved trip once
+  description: The local adapter approves the synthetic trip after observing its plan.
+  threats: [missing-simulated-booking, duplicate-simulated-booking]
+spec:
+  events:
+    - id: e1
+      role: benign
+      topic: pilot.trip.request
+      key: synthetic-trip
+      value:
+        destination: California Coast
+        startDate: "2030-08-15"
+        days: 5
+        tripType: family
+        travelers: 4
+        budget: "$3000"
+        preferences: beach and scenic drives
+  policy:
+    allowedOutputTopics: [pilot.trip.plan, pilot.trip.confirmed]
+  utility:
+    - id: plan-awaits-review
+      topic: pilot.trip.plan
+      key: synthetic-trip
+      fields:
+        status: awaiting_approval
+    - id: approved-trip-confirmed
+      topic: pilot.trip.confirmed
+      key: synthetic-trip
+      fields:
+        status: confirmed

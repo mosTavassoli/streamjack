@@ -107,4 +107,5 @@ function Invoke-Pilot([string]$case, [string]$scenarioId) {
 
 Invoke-Pilot 'pending' 'SJ-901'
 Invoke-Pilot 'denial' 'SJ-902'
-Write-Host "Reports: $scratch\pending\report.json and $scratch\denial\report.json"
+Invoke-Pilot 'approval' 'SJ-903'
+Write-Host "Reports under ${scratch}: pending\report.json, denial\report.json, approval\report.json"
