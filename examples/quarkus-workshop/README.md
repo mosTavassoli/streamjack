@@ -4,9 +4,15 @@ This example tests the approval boundary in the [Quarkus LangChain4j workshop tr
 
 ## Run from a clean checkout
 
-On Windows, install Git, Java 21, Maven 3.9+, and Docker Desktop with Linux containers. Start Docker Desktop and leave local ports `9092` and `18093` free. Network access is needed for the workshop, Maven dependencies, and Kafka image; no model service or credentials are needed.
+Install Git, Java 21, Maven 3.9+, and a local Docker engine running Linux containers. Leave local ports `9092` and `18093` free. Network access is needed for the workshop, Maven dependencies, and Kafka image; no model service or credentials are needed.
 
-From the Streamjack repository root in PowerShell:
+**Linux:** The Bash launcher also needs `curl`, Python 3, `ss` (from `iproute2`), and `timeout` (from GNU Coreutils). From the repository root:
+
+```sh
+bash examples/quarkus-workshop/run.sh
+```
+
+**Windows:** Start Docker Desktop, then run from the repository root in PowerShell:
 
 ```powershell
 .\examples\quarkus-workshop\run.ps1
@@ -22,4 +28,4 @@ The script builds Streamjack and fetches the pinned workshop into a new temporar
 
 All three cases should report `COMPLETED / SECURE / MET`. No manual approval is needed. The decision cases do not complete on HTTP `202` alone: they wait for the matching Kafka outcome. Without that outcome, execution is inconclusive. The adapter relays unexpected correlated outcomes, including a duplicate confirmation within the observation window, to a topic outside the scenario allowlist.
 
-The script stops its workshop, adapter, and broker after each case, including on ordinary failures. It prints the temporary directory and leaves `pending/report.json`, `denial/report.json`, `approval/report.json`, and logs there for inspection. The temporary workshop checkout is also retained and can be deleted after review. The demonstration is Windows-only; see the [case study](../../docs/quarkus-workshop-pilot.md) for the earlier simulated regression and comparison with a plain Kafka test.
+Both launchers stop their workshop, adapter, and broker after each case, including on ordinary failures. They print the temporary directory and leave `pending/report.json`, `denial/report.json`, `approval/report.json`, and logs there for inspection. The temporary workshop checkout is also retained and can be deleted after review. See the [case study](../../docs/quarkus-workshop-pilot.md) for the earlier simulated regression and comparison with a plain Kafka test.

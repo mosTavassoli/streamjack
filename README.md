@@ -67,7 +67,7 @@ The build uses a scripted model and a disposable Testcontainers Kafka broker. It
 
 For a single scenario or to try your own agent, start with the [pilot guide](docs/pilot.md).
 
-On Windows, the [Quarkus workshop example](examples/quarkus-workshop/README.md) tests what happens when a simulated trip is left pending, denied, or approved.
+The [Quarkus workshop example](examples/quarkus-workshop/README.md) runs on Linux and Windows and tests what happens when a simulated trip is left pending, denied, or approved.
 
 Build and install the reactor once:
 
