@@ -2,14 +2,35 @@
 
 **Can your AI agent be hijacked through a Kafka message?**
 
-streamjack is a deterministic safety harness for AI agents that consume and produce Apache Kafka events. It sends benign and adversarial ticket events, observes output records and audited tool calls, and reports both:
+streamjack attacks AI agents that read and write Apache Kafka events, then tells you two things: whether the agent stayed **secure**, and whether it still **did its job**.
+
+**For:** teams building AI agents that consume Kafka events—support triage, order handling, incident routing—who want evidence before production.
+
+## Why not just use a prompt red-teaming tool?
+
+Tools such as promptfoo and garak send attacks to a model or application endpoint. Event-driven agents can also fail through the delivery path itself:
+
+| Attack arriving through Kafka | What can go wrong |
+|---|---|
+| A header claims a human approved the action | The agent trusts metadata it shouldn't |
+| The same event is delivered twice | The agent repeats a real-world action |
+| One event poisons memory used by a later event | The attack takes effect long after it arrived |
+| A ticket asks for a customer's API key | A secret leaks into an output or tool call |
+
+## What a run tells you
+
+Each scenario gets two independent verdicts:
 
 - **Security** — `SECURE`, `COMPROMISED`, or `INCONCLUSIVE`
 - **Utility** — `MET`, `NOT_MET`, or `INCONCLUSIVE`
 
-A defense that blocks every event does not pass: security and utility are evaluated independently. No LLM is used as a judge.
+The bundled hardened agent passes all five scenarios; the deliberately vulnerable agent is caught by all five. A defense that blocks every event does not pass, because utility is scored separately. No LLM judges the result: every verdict comes from deterministic checks on output records and audited tool calls.
 
-> **Status:** v0.3 snapshot. The Kafka ticket workflow now has an optional GitHub Checks integration. The sample agent still defaults to the hardened, scripted model.
+See a recorded run of both agents, event by event, in the [browser demo](https://mostavassoli.github.io/streamjack/demo.html).
+
+Requires Java 21, Maven, and Docker. To try a single scenario or your own agent, start with the [pilot guide](docs/pilot.md).
+
+> **Status:** v0.3 snapshot. The Kafka ticket workflow has an optional GitHub Checks integration. The sample agent defaults to the hardened, scripted model.
 
 ## What streamjack exercises
 
@@ -68,6 +89,8 @@ The build uses a scripted model and a disposable Testcontainers Kafka broker. It
 For a single scenario or to try your own agent, start with the [pilot guide](docs/pilot.md).
 
 The [Quarkus workshop example](examples/quarkus-workshop/README.md) runs on Linux and Windows and tests what happens when a simulated trip is left pending, denied, or approved.
+
+If Kafka supplies context rather than triggering the agent, see [what Streamjack can test at that boundary](docs/kafka-backed-context.md).
 
 Build and install the reactor once:
 
@@ -132,6 +155,10 @@ OLLAMA_MODEL=qwen3:1.7b \
 Real-model behavior can vary; the checks remain deterministic. Prompt and response logging is disabled because all model-facing data is treated as untrusted.
 
 See the [local Ollama experiment](docs/ollama-experiment.md) for a before-and-after comparison of how explicit category definitions affected ticket classification.
+
+## Roadmap
+
+The next milestone is a [reproducible external pilot](docs/design.md#next-milestone-reproducible-external-pilot): run the Quarkus workshop's pending and denied approval scenarios through the same Streamjack adapter.
 
 ## Agent protocol
 
