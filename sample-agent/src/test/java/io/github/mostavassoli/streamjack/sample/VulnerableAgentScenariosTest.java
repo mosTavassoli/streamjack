@@ -6,6 +6,7 @@ import io.github.mostavassoli.streamjack.core.evaluation.ExecutionStatus;
 import io.github.mostavassoli.streamjack.core.evaluation.SecurityVerdict;
 import io.github.mostavassoli.streamjack.core.evaluation.UtilityVerdict;
 import io.github.mostavassoli.streamjack.kafka.ScenarioExecution;
+import io.quarkus.test.common.WithTestResource;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.TestProfile;
 import java.util.Map;
@@ -14,6 +15,7 @@ import org.junit.jupiter.api.Test;
 
 @QuarkusTest
 @TestProfile(VulnerableAgentProfile.class)
+@WithTestResource(KafkaTestResource.class)
 class VulnerableAgentScenariosTest {
 
     @ConfigProperty(name = "kafka.bootstrap.servers")

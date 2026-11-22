@@ -6,7 +6,7 @@ streamjack attacks AI agents that read and write Apache Kafka events, then tells
 
 **For:** teams building AI agents that consume Kafka events—support triage, order handling, incident routing—who want evidence before production.
 
-- **[Watch the demo](https://mostavassoli.github.io/streamjack/)** — compare a recorded run of both bundled agents, event by event. No setup needed.
+- **[Watch the demo](https://mostavassoli.github.io/streamjack/)** — compare both bundled agents event by event, then see Kafka itself reject an unauthorized write. No setup needed.
 - **[Run the Quarkus workshop pilot](examples/quarkus-workshop/README.md)** — check what happens when a synthetic trip is left pending, denied, or approved in the Quarkus LangChain4j workshop. No live model or credentials needed.
 
 ## Why not just use a prompt red-teaming tool?
@@ -82,6 +82,8 @@ mvn --batch-mode --no-transfer-progress verify
 ```
 
 The build uses a scripted model and a disposable Testcontainers Kafka broker. It does not contact Ollama or another model service. End-to-end tests verify that hardened mode passes all scenarios and the vulnerable mode is caught by all five.
+
+The [Kafka publication boundary test](docs/kafka-publication-boundary.md) checks a separate layer: Kafka rejects the triage agent's publication while still accepting normal drafts and a write from an authorized test producer.
 
 ## Run the sample locally
 

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>streamjack demo: can your AI agent be hijacked through a Kafka message?</title>
-<meta name="description" content="A recorded streamjack run: the same five Kafka events sent to a vulnerable and a hardened AI ticket agent.">
+<meta name="description" content="Five recorded Kafka scenarios and an integration test showing Kafka block unauthorized agent publication.">
 <style>
   :root {
     --bg: #f6f5f1; --panel: #ffffff; --ink: #1c1b19; --muted: #66625a; --line: #dedad1;
@@ -67,6 +67,16 @@
   .controls button { font: inherit; padding: 8px 16px; border-radius: 8px; border: 1px solid var(--ink);
                      background: var(--ink); color: #fff; cursor: pointer; }
   .controls button.secondary { background: transparent; color: var(--ink); }
+  .boundary { margin-top: 28px; scroll-margin-top: 16px; }
+  .boundary h2 { margin: 4px 0 8px; font-size: 1.4rem; }
+  .eyebrow { margin: 0; color: var(--muted); font-size: 0.85rem; }
+  .boundary-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+                    gap: 12px; padding: 0; list-style: none; }
+  .boundary-steps li { border: 1px solid var(--line); border-radius: 10px; padding: 14px; overflow-wrap: anywhere; }
+  .boundary-steps h3 { margin: 8px 0 4px; font-size: 1rem; }
+  .boundary-steps p { margin: 0; font-size: 0.9rem; }
+  .boundary summary { cursor: pointer; color: var(--accent); }
+  @media (max-width: 760px) { .boundary-steps { grid-template-columns: 1fr; } }
   .summary { margin-top: 28px; display: grid; gap: 16px; grid-template-columns: 1fr 1fr; }
   .summary > *, .results > * { min-width: 0; }
   @media (max-width: 760px) { .summary { grid-template-columns: 1fr; } }
@@ -87,7 +97,8 @@
   <p class="lede">
     A recorded <a href="https://github.com/mosTavassoli/streamjack">streamjack</a> run. The same Kafka events
     were sent to two builds of the same support-ticket agent: one deliberately vulnerable, one hardened.
-    Every verdict below comes from deterministic checks on the agent's output records and audited tool calls.
+    Each scenario verdict comes from deterministic checks on the agent's output records and audited tool calls.
+    <a href="#kafka-publication-boundary">See a separate test where Kafka blocks publication.</a>
   </p>
 
   <div class="tabs" role="tablist" aria-label="Attack scenarios" id="tabs"></div>
@@ -118,6 +129,40 @@
       <button type="button" class="secondary" id="showAll" hidden>Skip to results</button>
       <button type="button" class="secondary" id="next">Next scenario</button>
     </div>
+  </section>
+
+  <section class="card boundary" id="kafka-publication-boundary" aria-labelledby="boundary-title">
+    <p class="eyebrow">Recorded integration test · Apache Kafka 4.1.1</p>
+    <h2 id="boundary-title">Kafka blocks unauthorized publication</h2>
+    <p>The scenarios above show what the agent did. This test shows what Kafka lets it do.
+      The same agent identity handles two synthetic tickets, but only a separate test identity can publish.</p>
+    <ol class="boundary-steps" role="list">
+      <li>
+        <span class="verdict good">1 · Draft written</span>
+        <h3>Triage agent → <code>support.triage</code></h3>
+        <p>The normal billing ticket produced a draft marked <code>HUMAN_REVIEW</code>.</p>
+      </li>
+      <li>
+        <span class="verdict good">2 · Denied by Kafka</span>
+        <h3>Triage agent → <code>support.published</code></h3>
+        <p>The model fixture recommended publication for the second ticket. Kafka returned
+          <code>TopicAuthorizationException</code>, and no publication record appeared.</p>
+      </li>
+      <li>
+        <span class="verdict good">3 · Authorized write</span>
+        <h3>Test publisher → <code>support.published</code></h3>
+        <p>A different identity wrote a simulated reply. The test read it back at offset 0, so the topic was working.</p>
+      </li>
+    </ol>
+    <details>
+      <summary>Show recorded test output</summary>
+      <pre class="cmd">Kafka ACL demo: triage-agent -&gt; support.triage (billing, HUMAN_REVIEW)
+Kafka ACL demo: triage-agent -&gt; support.published (TopicAuthorizationException; no record)
+Kafka ACL demo: fixture-publisher -&gt; support.published (record observed at offset 0)</pre>
+    </details>
+    <p class="why">The model result was scripted; the Kafka permission check was real. No real replies, external
+      credentials, or human approval workflow were involved.
+      <a href="https://github.com/mosTavassoli/streamjack/blob/main/docs/kafka-publication-boundary.md">Run the local test.</a></p>
   </section>
 
   <div class="summary">

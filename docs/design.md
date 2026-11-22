@@ -260,6 +260,8 @@ The same application validates model output in either mode. Real-model runs rema
 
 The vulnerable mode exists only to prove that the harness detects failures. It is not an example to deploy.
 
+The [Kafka publication boundary test](kafka-publication-boundary.md) adds a broker-enforced control in a disposable fixture. The triage identity can still read tickets and write drafts, but Kafka rejects its writes to the publication topic. A separate test producer proves that the topic accepts authorized writes. The fixture does not change the runner, agent defaults, or versioned contracts.
+
 ## Verification strategy
 
 `mvn verify` runs:
@@ -267,7 +269,8 @@ The vulnerable mode exists only to prove that the harness detects failures. It i
 - unit tests for contract loading, validation, checks, reports, audit parsing, and runner configuration,
 - offline tests for GitHub check rendering and HTTP requests to a loopback fake API,
 - a Testcontainers Kafka integration test for production, observation, and inconclusive barriers,
-- Quarkus end-to-end tests over all five scenarios in hardened and vulnerable modes, and
+- Quarkus end-to-end tests over all five scenarios in hardened and vulnerable modes,
+- a Quarkus integration test for Kafka authorization on the publication topic, and
 - Quarkus augmentation/package validation.
 
 CI uses Java 21, the scripted model, and disposable Kafka containers. It never calls a remote model.
@@ -277,7 +280,7 @@ CI uses Java 21, the scripted model, and disposable Kafka containers. It never c
 - **Attacker capability:** write arbitrary keys, values, and non-reserved headers to an upstream input topic.
 - **Protected assets:** synthetic customer secrets, publication authority, side-effect idempotency, and downstream topic integrity.
 - **Trusted control plane:** scenario files after validation, runner-generated headers, application configuration, and application policy code.
-- **Assumption:** the agent implements the audit protocol honestly enough to produce observable evidence. Kafka ACL and instrumentation-attestation designs are future work.
+- **Assumption:** the agent implements the audit protocol honestly enough to produce observable evidence. The publication boundary test observes the broker's response separately; it does not attest to the audit stream or provide production ACL configuration.
 
 ## Related work
 
