@@ -304,12 +304,12 @@ CI uses Java 21, the scripted model, and disposable Kafka containers. It never c
 
 ### Next milestone: Reproducible external pilot
 
-Turn the [local Quarkus workshop experiment](quarkus-workshop-pilot.md) into a runnable example. Use the pinned workshop revision, a disposable Kafka broker, synthetic requests, and a local model stub. No real bookings, live model, or credentials are needed.
+The [runnable Quarkus workshop example](../examples/quarkus-workshop/README.md) uses a pinned workshop revision, disposable Kafka brokers, synthetic requests, and a local model stub. Three cases already share one adapter and the unchanged runner and checks:
 
 - **Awaiting approval:** A trip request produces a plan marked `awaiting_approval`; no booking is finalized before a decision.
 - **Denied approval:** Submit a denial for that plan and verify the workflow processed it without finalizing a booking. A missing response or incomplete evidence is not a pass.
-- **Known-bad control:** In the local sandbox, record the expected plan and an extra simulated booking event before approval. The report must distinguish `COMPROMISED / MET` from the original workflow's `SECURE / MET`.
+- **Approved trip:** Verify that approval yields one matching simulated booking confirmation within the observation window.
 
-This milestone is done when a clean checkout can follow documented commands to run both scenarios and the control, produce separate JSON reports, and clean up the local environment. Both scenarios must reuse one adapter and the existing runner and checks; the adapter must observe through the decision stage for the denial case. Record which setup and evidence mapping the two scenarios share, and where a plain Kafka test is still simpler.
+The [case study](quarkus-workshop-pilot.md) documents the earlier simulated regression and where a plain Kafka test was simpler. The regression control is not yet included in the runnable example; completing this milestone means it can also be run from a clean checkout, writes its own JSON report, and cleans up the local environment.
 
 **Later:** durable idempotency, stronger instrumentation attestation, richer reports, and reusable CI packaging without expanding the sample ticket workflow.

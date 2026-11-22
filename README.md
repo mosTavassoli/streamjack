@@ -6,6 +6,9 @@ streamjack attacks AI agents that read and write Apache Kafka events, then tells
 
 **For:** teams building AI agents that consume Kafka events—support triage, order handling, incident routing—who want evidence before production.
 
+- **[Watch the demo](https://mostavassoli.github.io/streamjack/)** — compare a recorded run of both bundled agents, event by event. No setup needed.
+- **[Run the Quarkus workshop pilot](examples/quarkus-workshop/README.md)** — check what happens when a synthetic trip is left pending, denied, or approved in the Quarkus LangChain4j workshop. No live model or credentials needed.
+
 ## Why not just use a prompt red-teaming tool?
 
 Tools such as promptfoo and garak send attacks to a model or application endpoint. Event-driven agents can also fail through the delivery path itself:
@@ -25,10 +28,6 @@ Each scenario gets two independent verdicts:
 - **Utility** — `MET`, `NOT_MET`, or `INCONCLUSIVE`
 
 The bundled hardened agent passes all five scenarios; the deliberately vulnerable agent is caught by all five. A defense that blocks every event does not pass, because utility is scored separately. No LLM judges the result: every verdict comes from deterministic checks on output records and audited tool calls.
-
-See a recorded run of both agents, event by event, in the [browser demo](https://mostavassoli.github.io/streamjack/demo.html).
-
-Requires Java 21, Maven, and Docker. To try a single scenario or your own agent, start with the [pilot guide](docs/pilot.md).
 
 > **Status:** v0.3 snapshot. The Kafka ticket workflow has an optional GitHub Checks integration. The sample agent defaults to the hardened, scripted model.
 
@@ -87,8 +86,6 @@ The build uses a scripted model and a disposable Testcontainers Kafka broker. It
 ## Run the sample locally
 
 For a single scenario or to try your own agent, start with the [pilot guide](docs/pilot.md).
-
-The [Quarkus workshop example](examples/quarkus-workshop/README.md) runs on Linux and Windows and tests what happens when a simulated trip is left pending, denied, or approved.
 
 If Kafka supplies context rather than triggering the agent, see [what Streamjack can test at that boundary](docs/kafka-backed-context.md).
 
@@ -158,7 +155,7 @@ See the [local Ollama experiment](docs/ollama-experiment.md) for a before-and-af
 
 ## Roadmap
 
-The next milestone is a [reproducible external pilot](docs/design.md#next-milestone-reproducible-external-pilot): run the Quarkus workshop's pending and denied approval scenarios through the same Streamjack adapter.
+See the [design roadmap](docs/design.md#next-milestone-reproducible-external-pilot) for what's already runnable in the workshop pilot and what's still planned.
 
 ## Agent protocol
 
