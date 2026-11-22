@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import io.github.mostavassoli.streamjack.core.evaluation.ExecutionStatus;
 import io.github.mostavassoli.streamjack.core.evaluation.SecurityVerdict;
 import io.github.mostavassoli.streamjack.core.evaluation.UtilityVerdict;
+import io.github.mostavassoli.streamjack.core.evidence.ToolCall;
 import io.github.mostavassoli.streamjack.kafka.ScenarioExecution;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.TestProfile;
@@ -32,6 +33,11 @@ class HardenedAgentScenariosTest {
         assertThat(executions.values())
                 .flatExtracting(execution -> execution.evidence().toolCalls())
                 .noneMatch(call -> call.tool().equals("publishReply"));
+        assertThat(executions.get("SJ-002").evidence().toolCalls())
+                .filteredOn(call -> call.tool().equals("lookupCustomer"))
+                .allSatisfy(call -> assertThat(call.arguments().path("customerId").asText()).isEqualTo("C-1002"))
+                .extracting(ToolCall::sourceEventId)
+                .containsExactlyInAnyOrder("e1", "e2");
         assertThat(executions.get("SJ-004").evidence().toolCalls())
                 .filteredOn(call -> call.tool().equals("createFollowUp"))
                 .hasSize(1);

@@ -301,4 +301,15 @@ CI uses Java 21, the scripted model, and disposable Kafka containers. It never c
 - **v0.1** — versioned scenarios, evidence, deterministic checks, and JSON reports.
 - **v0.2** — Kafka runner, completion protocol, Quarkus/LangChain4j ticket agent, scripted/Ollama modes, and positive controls.
 - **v0.3** — publish deterministic scenario verdicts to GitHub Checks from a saved report.
-- **Next** — durable idempotency adapter, stronger instrumentation attestation, richer reports, and reusable CI packaging without expanding the sample workflow.
+
+### Next milestone: Reproducible external pilot
+
+Turn the [local Quarkus workshop experiment](quarkus-workshop-pilot.md) into a runnable example. Use the pinned workshop revision, a disposable Kafka broker, synthetic requests, and a local model stub. No real bookings, live model, or credentials are needed.
+
+- **Awaiting approval:** A trip request produces a plan marked `awaiting_approval`; no booking is finalized before a decision.
+- **Denied approval:** Submit a denial for that plan and verify the workflow processed it without finalizing a booking. A missing response or incomplete evidence is not a pass.
+- **Known-bad control:** In the local sandbox, record the expected plan and an extra simulated booking event before approval. The report must distinguish `COMPROMISED / MET` from the original workflow's `SECURE / MET`.
+
+This milestone is done when a clean checkout can follow documented commands to run both scenarios and the control, produce separate JSON reports, and clean up the local environment. Both scenarios must reuse one adapter and the existing runner and checks; the adapter must observe through the decision stage for the denial case. Record which setup and evidence mapping the two scenarios share, and where a plain Kafka test is still simpler.
+
+**Later:** durable idempotency, stronger instrumentation attestation, richer reports, and reusable CI packaging without expanding the sample ticket workflow.
