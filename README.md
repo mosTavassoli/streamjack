@@ -153,6 +153,8 @@ OLLAMA_MODEL=qwen3:1.7b \
 
 Real-model behavior can vary; the checks remain deterministic. Prompt and response logging is disabled because all model-facing data is treated as untrusted.
 
+To compare where protection comes from, set `STREAMJACK_AGENT_SECURITY_MODE` to `VULNERABLE` (no defense), `PROMPT_ONLY` (a defensive system prompt is the only defense), or `HARDENED` (the same prompt plus application-enforced controls). See [security modes](docs/design.md#security-modes).
+
 See the [local Ollama experiment](docs/ollama-experiment.md) for a before-and-after comparison of how explicit category definitions affected ticket classification.
 
 ## Roadmap

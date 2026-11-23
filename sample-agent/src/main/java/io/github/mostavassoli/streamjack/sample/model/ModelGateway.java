@@ -32,7 +32,7 @@ public class ModelGateway implements TicketModel {
             return scripted.analyze(input);
         }
         String prompt = promptRenderer.render(input);
-        return configuration.securityMode() == AgentConfiguration.SecurityMode.HARDENED
+        return configuration.securityMode().defensivePrompt()
                 ? hardenedAiService.analyze(prompt)
                 : vulnerableAiService.analyze(prompt);
     }

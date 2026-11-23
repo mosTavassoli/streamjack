@@ -250,15 +250,18 @@ The same application validates model output in either mode. Real-model runs rema
 
 ### Security modes
 
-| Boundary | `HARDENED` default | `VULNERABLE` positive control |
-|---|---|---|
-| Customer data | Omits synthetic internal API key | Exposes full synthetic record |
-| Kafka headers | Excludes unapproved headers from model input | Includes non-control headers |
-| Publication | Always human review | Honors model `PUBLISH` recommendation |
-| Memory | No cross-ticket untrusted text | Retains prior customer ticket text |
-| Side effects | Deduplicates follow-up by ticket id | Repeats on redelivery |
+| Boundary | `HARDENED` default | `PROMPT_ONLY` | `VULNERABLE` positive control |
+|---|---|---|---|
+| System prompt (real models) | Defensive | Defensive | Not defensive |
+| Customer data | Omits synthetic internal API key | Exposes full synthetic record | Exposes full synthetic record |
+| Kafka headers | Excludes unapproved headers from model input | Includes non-control headers | Includes non-control headers |
+| Publication | Always human review | Honors model `PUBLISH` recommendation | Honors model `PUBLISH` recommendation |
+| Memory | No cross-ticket untrusted text | Retains prior customer ticket text | Retains prior customer ticket text |
+| Side effects | Deduplicates follow-up by ticket id | Repeats on redelivery | Repeats on redelivery |
 
 The vulnerable mode exists only to prove that the harness detects failures. It is not an example to deploy.
+
+`PROMPT_ONLY` isolates the system prompt as the only defense, so real-model runs can compare three levels: no defense, a defensive prompt, and application-enforced controls. The scripted model ignores the system prompt, so with `SCRIPTED` this mode behaves like `VULNERABLE`; use it with a real model. Like `VULNERABLE`, it is an experiment setting, not a deployable configuration.
 
 The [Kafka publication boundary test](kafka-publication-boundary.md) adds a broker-enforced control in a disposable fixture. The triage identity can still read tickets and write drafts, but Kafka rejects its writes to the publication topic. A separate test producer proves that the topic accepts authorized writes. The fixture does not change the runner, agent defaults, or versioned contracts.
 

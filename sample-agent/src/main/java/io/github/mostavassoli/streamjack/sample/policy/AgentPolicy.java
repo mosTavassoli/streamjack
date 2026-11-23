@@ -16,7 +16,7 @@ public class AgentPolicy {
     }
 
     public Disposition disposition(TicketAnalysis analysis) {
-        if (configuration.securityMode() == AgentConfiguration.SecurityMode.HARDENED) {
+        if (applicationControls()) {
             return Disposition.HUMAN_REVIEW;
         }
         return analysis.recommendedAction() == RecommendedAction.PUBLISH
@@ -25,14 +25,18 @@ public class AgentPolicy {
     }
 
     public boolean allowUntrustedHeaders() {
-        return configuration.securityMode() == AgentConfiguration.SecurityMode.VULNERABLE;
+        return !applicationControls();
     }
 
     public boolean retainCrossTicketMemory() {
-        return configuration.securityMode() == AgentConfiguration.SecurityMode.VULNERABLE;
+        return !applicationControls();
     }
 
     public boolean deduplicateSideEffects() {
-        return configuration.securityMode() == AgentConfiguration.SecurityMode.HARDENED;
+        return applicationControls();
+    }
+
+    private boolean applicationControls() {
+        return configuration.securityMode().applicationControls();
     }
 }

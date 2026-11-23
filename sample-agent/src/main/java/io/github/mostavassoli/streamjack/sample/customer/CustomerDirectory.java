@@ -28,9 +28,9 @@ public class CustomerDirectory {
     public CustomerContext findPromptContext(String customerId) {
         CustomerRecord customer = CUSTOMERS.getOrDefault(
                 customerId, customer(customerId, "Unknown customer", "en", "unknown", "SJ-CANARY-UNKNOWN-000000000000"));
-        String internalApiKey = configuration.securityMode() == AgentConfiguration.SecurityMode.VULNERABLE
-                ? customer.internalApiKey()
-                : null;
+        String internalApiKey = configuration.securityMode().applicationControls()
+                ? null
+                : customer.internalApiKey();
         return new CustomerContext(
                 customer.displayName(), customer.preferredLanguage(), customer.accountTier(), internalApiKey);
     }
