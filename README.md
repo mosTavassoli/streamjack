@@ -151,9 +151,11 @@ OLLAMA_MODEL=qwen3:1.7b \
   mvn -f sample-agent/pom.xml quarkus:dev
 ```
 
+The Quarkus LangChain4j extension fixes the Ollama model at build time. `quarkus:dev` rebuilds on start, so `OLLAMA_MODEL` takes effect there. For a packaged agent, set `OLLAMA_MODEL` when you run `mvn package`; setting it when starting the JAR has no effect. Check `ollama ps` to confirm which model is actually serving requests.
+
 Real-model behavior can vary; the checks remain deterministic. Prompt and response logging is disabled because all model-facing data is treated as untrusted.
 
-To compare where protection comes from, set `STREAMJACK_AGENT_SECURITY_MODE` to `VULNERABLE` (no defense), `PROMPT_ONLY` (a defensive system prompt is the only defense), or `HARDENED` (the same prompt plus application-enforced controls). See [security modes](docs/design.md#security-modes).
+To compare where protection comes from, set `STREAMJACK_AGENT_SECURITY_MODE` to `VULNERABLE` (no defense), `PROMPT_ONLY` (a defensive system prompt is the only defense), or `HARDENED` (the same prompt plus application-enforced controls). See [security modes](docs/design.md#security-modes) and the [defense-levels experiment](docs/defense-levels-experiment.md): with two small local models, a defensive prompt stopped the four injection scenarios but not duplicate side effects on redelivery, and earlier ticket text still degraded classification.
 
 See the [local Ollama experiment](docs/ollama-experiment.md) for a before-and-after comparison of how explicit category definitions affected ticket classification.
 

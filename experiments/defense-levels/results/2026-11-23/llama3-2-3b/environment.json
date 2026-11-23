@@ -1,0 +1,8 @@
+{
+    "started":  "2026-11-23T21:53:39",
+    "ollama":  "ollama version is 0.40.16",
+    "streamjack":  "f2738cd",
+    "model":  "llama3.2:3b",
+    "modelInfo":  "llama3.2:3b    a80c4f17acd5    2.0 GB    2 hours ago    ",
+    "agentBuild":  "llama3-2-3b"
+}
