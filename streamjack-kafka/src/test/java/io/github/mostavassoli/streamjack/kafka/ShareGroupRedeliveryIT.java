@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
@@ -17,9 +18,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.apache.kafka.clients.admin.Admin;
 import org.apache.kafka.clients.admin.AlterConfigOp;
 import org.apache.kafka.clients.admin.ConfigEntry;
-import org.apache.kafka.clients.admin.FeatureUpdate;
 import org.apache.kafka.clients.admin.NewTopic;
-import org.apache.kafka.clients.admin.UpdateFeaturesOptions;
 import org.apache.kafka.common.config.ConfigResource;
 import org.apache.kafka.clients.consumer.AcknowledgeType;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -28,7 +27,6 @@ import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -40,6 +38,10 @@ import org.testcontainers.kafka.KafkaContainer;
  * <p>Two simulated agent instances share one group. Each "thinks" for {@link #WORK} (standing in for a slow model call)
  * and then performs one side effect per record. Timings are scaled down from the manual experiment (30 s lock, 40 s
  * processing) with the same ratio, so each case runs in seconds. No model, credentials, or external systems are used.
+ *
+ * <p>A consumer that blocks while working cannot renew its lock, so Kafka redelivers the record up to the delivery
+ * limit. Deduplication then prevents repeated side effects but not repeated work. A lock longer than the processing
+ * time, or renewing the lock from a responsive consumer thread (Kafka 4.2+), delivers the record once.
  */
 @Testcontainers(disabledWithoutDocker = true)
 class ShareGroupRedeliveryIT {
@@ -47,28 +49,18 @@ class ShareGroupRedeliveryIT {
     private static final Duration WORK = Duration.ofSeconds(3);
     private static final int DEFAULT_DELIVERY_LIMIT = 5;
 
+    // Kafka 4.2 is the first release where share groups are enabled by default and the client can renew a lock.
     @Container
-    private static final KafkaContainer KAFKA = new KafkaContainer("apache/kafka:4.1.1")
+    private static final KafkaContainer KAFKA = new KafkaContainer("apache/kafka:4.2.1")
             // Allow a short group lock on this disposable broker so the test stays fast.
             .withEnv("KAFKA_GROUP_SHARE_MIN_RECORD_LOCK_DURATION_MS", "1000")
             // A single broker cannot host the share-group state topic at the default replication factor of 3.
             .withEnv("KAFKA_SHARE_COORDINATOR_STATE_TOPIC_REPLICATION_FACTOR", "1")
             .withEnv("KAFKA_SHARE_COORDINATOR_STATE_TOPIC_MIN_ISR", "1");
 
-    @BeforeAll
-    static void enableShareGroups() throws Exception {
-        // Share groups are not enabled by default in Kafka 4.1.
-        try (Admin admin = admin()) {
-            admin.updateFeatures(
-                            Map.of("share.version", new FeatureUpdate((short) 1, FeatureUpdate.UpgradeType.UPGRADE)),
-                            new UpdateFeaturesOptions())
-                    .all().get(20, TimeUnit.SECONDS);
-        }
-    }
-
     @Test
     void slowAgentRepeatsTheSideEffectUntilTheDeliveryLimit() throws Exception {
-        Outcome outcome = run("no-fix", Duration.ofSeconds(2), false);
+        Outcome outcome = run("no-fix", Duration.ofSeconds(2), false, false);
 
         assertThat(outcome.deliveries()).containsExactly(1, 2, 3, 4, 5);
         assertThat(outcome.sideEffects()).isEqualTo(DEFAULT_DELIVERY_LIMIT);
@@ -77,7 +69,7 @@ class ShareGroupRedeliveryIT {
 
     @Test
     void deduplicationKeepsOneSideEffectButKafkaStillRedelivers() throws Exception {
-        Outcome outcome = run("dedup", Duration.ofSeconds(2), true);
+        Outcome outcome = run("dedup", Duration.ofSeconds(2), true, false);
 
         assertThat(outcome.sideEffects()).isEqualTo(1);
         // Every redelivery still pays for the full slow processing before the duplicate is detected.
@@ -86,17 +78,34 @@ class ShareGroupRedeliveryIT {
 
     @Test
     void lockLongerThanProcessingDeliversOnce() throws Exception {
-        Outcome outcome = run("long-lock", Duration.ofSeconds(6), false);
+        Outcome outcome = run("long-lock", Duration.ofSeconds(6), false, false);
 
         assertThat(outcome.deliveries()).containsExactly(1);
         assertThat(outcome.sideEffects()).isEqualTo(1);
         assertThat(outcome.rejectedAcknowledgements()).isZero();
     }
 
-    private record Outcome(List<Integer> deliveries, int sideEffects, int rejectedAcknowledgements) {
+    @Test
+    void renewingTheLockWhileWorkingDeliversOnceAtTheShortLock() throws Exception {
+        Outcome outcome = run("renew", Duration.ofSeconds(2), false, true);
+
+        assertThat(outcome.deliveries()).containsExactly(1);
+        assertThat(outcome.sideEffects()).isEqualTo(1);
+        assertThat(outcome.rejectedAcknowledgements()).isZero();
+        assertThat(outcome.renewals()).isPositive();
+        // Renewing keeps the original delivery attempt; it does not count as a redelivery.
+        assertThat(outcome.renewedDeliveryCounts()).isNotEmpty().containsOnly(1);
     }
 
-    private static Outcome run(String name, Duration lock, boolean deduplicate) throws Exception {
+    private record Outcome(List<Integer> deliveries, int sideEffects, int rejectedAcknowledgements, int renewals,
+            List<Integer> renewedDeliveryCounts) {
+    }
+
+    /**
+     * @param renew if true, the slow work runs on another thread while the consumer thread keeps renewing the lock;
+     *              otherwise the work blocks the consumer thread, as in a simple poll loop.
+     */
+    private static Outcome run(String name, Duration lock, boolean deduplicate, boolean renew) throws Exception {
         String topic = "tickets-" + name;
         String group = "agents-" + name;
         try (Admin admin = admin()) {
@@ -111,6 +120,8 @@ class ShareGroupRedeliveryIT {
         List<Integer> deliveries = new CopyOnWriteArrayList<>();
         AtomicInteger sideEffects = new AtomicInteger();
         AtomicInteger rejected = new AtomicInteger();
+        AtomicInteger renewals = new AtomicInteger();
+        List<Integer> renewedDeliveryCounts = new CopyOnWriteArrayList<>();
         AtomicLong lastActivity = new AtomicLong(System.nanoTime());
         AtomicBoolean running = new AtomicBoolean(true);
         Set<String> completedTickets = ConcurrentHashMap.newKeySet();
@@ -123,11 +134,33 @@ class ShareGroupRedeliveryIT {
                     for (ConsumerRecord<String, String> record : consumer.poll(Duration.ofMillis(200))) {
                         deliveries.add(record.deliveryCount().map(Short::intValue).orElse(-1));
                         lastActivity.set(System.nanoTime());
-                        Thread.sleep(WORK.toMillis());
+                        ConsumerRecord<String, String> current = record;
+                        if (renew) {
+                            // KafkaShareConsumer is not thread-safe, so only this thread talks to Kafka.
+                            CompletableFuture<Void> work = CompletableFuture.runAsync(ShareGroupRedeliveryIT::slowWork);
+                            while (!work.isDone()) {
+                                Thread.sleep(lock.toMillis() / 3);
+                                if (work.isDone()) {
+                                    break;
+                                }
+                                consumer.acknowledge(current, AcknowledgeType.RENEW);
+                                for (Optional<?> error : consumer.commitSync().values()) {
+                                    if (error.isPresent()) {
+                                        rejected.incrementAndGet();
+                                    }
+                                }
+                                renewals.incrementAndGet();
+                                // A renewed record is handed back by a later poll; acknowledge that copy from now on.
+                                current = pollFor(consumer, current, renewedDeliveryCounts);
+                            }
+                            work.join();
+                        } else {
+                            slowWork();
+                        }
                         if (!deduplicate || completedTickets.add(record.key())) {
                             sideEffects.incrementAndGet();
                         }
-                        consumer.acknowledge(record, AcknowledgeType.ACCEPT);
+                        consumer.acknowledge(current, AcknowledgeType.ACCEPT);
                         for (Optional<?> error : consumer.commitSync().values()) {
                             if (error.isPresent()) {
                                 rejected.incrementAndGet();
@@ -166,7 +199,33 @@ class ShareGroupRedeliveryIT {
         }
         assertThat(agentErrors).as("errors in the simulated agent instances").isEmpty();
         assertThat(deliveries).as("the ticket must reach an agent instance").isNotEmpty();
-        return new Outcome(List.copyOf(deliveries).stream().sorted().toList(), sideEffects.get(), rejected.get());
+        return new Outcome(List.copyOf(deliveries).stream().sorted().toList(), sideEffects.get(), rejected.get(),
+                renewals.get(), List.copyOf(renewedDeliveryCounts));
+    }
+
+    /** Polls until the renewed record comes back and returns that copy. */
+    private static ConsumerRecord<String, String> pollFor(KafkaShareConsumer<String, String> consumer,
+            ConsumerRecord<String, String> renewed, List<Integer> renewedDeliveryCounts) {
+        long deadline = System.nanoTime() + Duration.ofSeconds(10).toNanos();
+        while (System.nanoTime() < deadline) {
+            for (ConsumerRecord<String, String> copy : consumer.poll(Duration.ofMillis(100))) {
+                if (copy.offset() == renewed.offset()) {
+                    renewedDeliveryCounts.add(copy.deliveryCount().map(Short::intValue).orElse(-1));
+                    return copy;
+                }
+            }
+        }
+        throw new IllegalStateException("renewed record " + renewed.offset() + " was not returned by poll");
+    }
+
+    /** Stands in for a slow model call. */
+    private static void slowWork() {
+        try {
+            Thread.sleep(WORK.toMillis());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("interrupted", e);
+        }
     }
 
     private static Properties shareConsumerProperties(String group) {
