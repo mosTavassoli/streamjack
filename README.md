@@ -155,7 +155,7 @@ The Quarkus LangChain4j extension fixes the Ollama model at build time. `quarkus
 
 Real-model behavior can vary; the checks remain deterministic. Prompt and response logging is disabled because all model-facing data is treated as untrusted.
 
-To compare where protection comes from, set `STREAMJACK_AGENT_SECURITY_MODE` to `VULNERABLE` (no defense), `PROMPT_ONLY` (a defensive system prompt is the only defense), or `HARDENED` (the same prompt plus application-enforced controls). See [security modes](docs/design.md#security-modes) and the [defense-levels experiment](docs/defense-levels-experiment.md): with two small local models, a defensive prompt stopped the four injection scenarios but not duplicate side effects on redelivery, and earlier ticket text still degraded classification.
+To compare where protection comes from, set `STREAMJACK_AGENT_SECURITY_MODE` to `VULNERABLE` (no defense), `PROMPT_ONLY` (a defensive system prompt is the only defense), or `HARDENED` (the same prompt plus application-enforced controls). See [security modes](docs/design.md#security-modes) and the [defense-levels experiment](docs/defense-levels-experiment.md): with two small local models, only application controls prevented duplicate side effects on redelivery and kept earlier ticket text from degrading classification. The experiment could not show whether either model follows injected instructions at all.
 
 See the [local Ollama experiment](docs/ollama-experiment.md) for a before-and-after comparison of how explicit category definitions affected ticket classification.
 
