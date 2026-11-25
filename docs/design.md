@@ -276,6 +276,8 @@ The vulnerable mode exists only to prove that the harness detects failures. It i
 
 The [Kafka publication boundary test](kafka-publication-boundary.md) adds a broker-enforced control in a disposable fixture. The triage identity can still read tickets and write drafts, but Kafka rejects its writes to the publication topic. A separate test producer proves that the topic accepts authorized writes. The fixture does not change the runner, agent defaults, or versioned contracts.
 
+[Share-group redelivery](share-group-redelivery.md) measures what Kafka share groups do to an agent slower than the record lock: repeated deliveries and side effects, which controls prevent them, and a lock-renewal problem in SmallRye Reactive Messaging. These are tests and opt-in experiments; they do not change the runner or contracts.
+
 ## Verification strategy
 
 `mvn verify` runs:

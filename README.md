@@ -159,6 +159,14 @@ To compare where protection comes from, set `STREAMJACK_AGENT_SECURITY_MODE` to 
 
 See the [local Ollama experiment](docs/ollama-experiment.md) for a before-and-after comparison of how explicit category definitions affected ticket classification.
 
+## Slow agents and Kafka share groups
+
+With Kafka share groups (queue-style consumption, enabled by default from Kafka 4.2), each record is locked to one consumer for 30 s by default. An agent that takes longer than the lock gets the same event again, up to five times, and its side effects can repeat.
+
+[`ShareGroupRedeliveryIT`](streamjack-kafka/src/test/java/io/github/mostavassoli/streamjack/kafka/ShareGroupRedeliveryIT.java) runs in `mvn verify` against Kafka 4.2.1. When processing blocks the consumer past the lock, the record is delivered five times and the side effect happens five times. Deduplication cuts the side effects to one, but the work still runs five times. A longer lock, or renewing the lock from a free consumer thread, delivers the record once.
+
+Opt-in experiments (`-Dstreamjack.experiments=true`) show that SmallRye Reactive Messaging's lock renewal does not keep the lock: the record is redelivered, and a later record is never processed. This is reported as [smallrye-reactive-messaging#3636](https://github.com/smallrye/smallrye-reactive-messaging/issues/3636), with a [minimal reproducer](https://github.com/mosTavassoli/smallrye-share-group-renewal-repro). See [share-group redelivery](docs/share-group-redelivery.md) for the results and guidance.
+
 ## Roadmap
 
 See the [design roadmap](docs/design.md#next-milestone-reproducible-external-pilot) for what's already runnable in the workshop pilot and what's still planned.
