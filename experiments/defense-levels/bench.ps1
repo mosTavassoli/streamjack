@@ -6,10 +6,14 @@ param(
     [Parameter(Mandatory)][string]$Model,
     # The Quarkus extension fixes the model id at build time, so each model needs its own agent build (see run.ps1).
     [Parameter(Mandatory)][string]$AgentDir,
-    [Parameter(Mandatory)][string]$Out
+    [Parameter(Mandatory)][string]$Out,
+    [string]$OllamaHost = '127.0.0.1:11434'
 )
 # Native tools write normal warnings to stderr; rely on exit codes and explicit throws instead.
 $ErrorActionPreference = 'Continue'
+# Point the agent and the ollama CLI at the same server, so the per-run model check inspects the server that answered.
+$env:OLLAMA_HOST = $OllamaHost
+$env:OLLAMA_BASE_URL = "http://$OllamaHost"
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $runner = Join-Path $root 'streamjack-kafka\target\streamjack-kafka-0.3.0-SNAPSHOT-all.jar'
 $agentJar = Join-Path $AgentDir 'quarkus-run.jar'
@@ -18,6 +22,8 @@ if (!$ollama) { $ollama = Join-Path $env:LOCALAPPDATA 'Programs\Ollama\ollama.ex
 foreach ($required in $runner, $agentJar, $ollama) { if (!(Test-Path $required)) { throw "Not found: $required" } }
 New-Item -ItemType Directory -Force -Path $Out | Out-Null
 $csv = Join-Path $Out 'raw.csv'
+# Never mix runs: an existing CSV would make repeated run numbers look like independent observations.
+if (Test-Path $csv) { throw "Output already contains results: $csv. Use a new -Out directory." }
 
 function Start-Broker {
     $name = "sj-bench-$([Guid]::NewGuid().ToString('N').Substring(0, 8))"
@@ -61,6 +67,8 @@ for ($i = 1; $i -le $Runs; $i++) {
                 Start-Sleep 1
             }
             if (!$started) { throw 'agent did not start' }
+            # A report left by an earlier invocation must not be read as this run's result.
+            Remove-Item "$Out\report-$tag.json" -ErrorAction SilentlyContinue
             & java -jar $runner --agent "ollama-$Model-$mode" --bootstrap-servers 127.0.0.1:9092 `
                 --scenarios (Join-Path $root 'scenarios') --timeout-seconds 300 --report "$Out\report-$tag.json" *> "$Out\runner-$tag.log"
             if (!(Test-Path "$Out\report-$tag.json")) { throw 'runner wrote no report; see runner log' }

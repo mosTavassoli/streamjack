@@ -57,15 +57,27 @@ final class ShareGroupAgentSupport {
         }
     }
 
-    /** Returns how many times the model analyzed the ticket once processing has gone quiet. */
-    static int analysesOf(String bootstrapServers, String ticketId, Duration quiet) throws Exception {
+    /**
+     * What happened to one ticket: analyses started and completed, and whether processing settled (started at least
+     * once, every started analysis completed, and nothing changed for the quiet period) before the time limit.
+     */
+    record Observation(int started, int completed, boolean settled) {
+
+        @Override
+        public String toString() {
+            return "started=" + started + " completed=" + completed + (settled ? " (settled)" : " (not settled in time)");
+        }
+    }
+
+    static Observation analysesOf(String bootstrapServers, String ticketId, Duration quiet) throws Exception {
         return analysesOf(bootstrapServers, ticketId, quiet, Duration.ofSeconds(120));
     }
 
-    /** As above, but gives up after {@code maxWait}; returns 0 if the ticket was never analyzed. */
-    static int analysesOf(String bootstrapServers, String ticketId, Duration quiet, Duration maxWait)
+    /** Sends one ticket and observes its analyses until they settle or {@code maxWait} elapses. */
+    static Observation analysesOf(String bootstrapServers, String ticketId, Duration quiet, Duration maxWait)
             throws Exception {
         SlowScriptedModel.CALLS.remove(ticketId);
+        SlowScriptedModel.COMPLETED.remove(ticketId);
         try (KafkaProducer<String, String> producer = new KafkaProducer<>(Map.of(
                 "bootstrap.servers", bootstrapServers,
                 "key.serializer", StringSerializer.class.getName(),
@@ -81,19 +93,26 @@ final class ShareGroupAgentSupport {
         }
 
         long deadline = System.nanoTime() + maxWait.toNanos();
-        int last = -1;
+        int lastStarted = -1;
+        int lastCompleted = -1;
         long lastChange = System.nanoTime();
         while (System.nanoTime() < deadline) {
-            AtomicInteger calls = SlowScriptedModel.CALLS.get(ticketId);
-            int now = calls == null ? 0 : calls.get();
-            if (now != last) {
-                last = now;
+            int started = count(SlowScriptedModel.CALLS, ticketId);
+            int completed = count(SlowScriptedModel.COMPLETED, ticketId);
+            if (started != lastStarted || completed != lastCompleted) {
+                lastStarted = started;
+                lastCompleted = completed;
                 lastChange = System.nanoTime();
-            } else if (now > 0 && System.nanoTime() - lastChange > quiet.toNanos()) {
-                return now;
+            } else if (started > 0 && started == completed && System.nanoTime() - lastChange > quiet.toNanos()) {
+                return new Observation(started, completed, true);
             }
             Thread.sleep(200);
         }
-        return last;
+        return new Observation(Math.max(lastStarted, 0), Math.max(lastCompleted, 0), false);
+    }
+
+    private static int count(Map<String, AtomicInteger> counts, String ticketId) {
+        AtomicInteger value = counts.get(ticketId);
+        return value == null ? 0 : value.get();
     }
 }

@@ -17,6 +17,7 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 public class SlowScriptedModel extends ScriptedTicketModel {
 
     static final Map<String, AtomicInteger> CALLS = new ConcurrentHashMap<>();
+    static final Map<String, AtomicInteger> COMPLETED = new ConcurrentHashMap<>();
 
     @ConfigProperty(name = "streamjack.test.model-delay-ms")
     long delayMs;
@@ -30,6 +31,8 @@ public class SlowScriptedModel extends ScriptedTicketModel {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("interrupted", e);
         }
-        return super.analyze(input);
+        TicketAnalysis analysis = super.analyze(input);
+        COMPLETED.computeIfAbsent(input.ticket().ticketId(), id -> new AtomicInteger()).incrementAndGet();
+        return analysis;
     }
 }

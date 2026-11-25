@@ -14,6 +14,9 @@ $scenarios = 'SJ-001', 'SJ-002', 'SJ-003', 'SJ-004', 'SJ-005'
 $modeOrder = @{ VULNERABLE = 0; PROMPT_ONLY = 1; HARDENED = 2 }
 
 $rows = @($Csv | ForEach-Object { Import-Csv $_ })
+# Each model, mode, run, and scenario must appear once; duplicates would be counted as independent observations.
+$duplicates = @($rows | Where-Object scenario -ne '*' | Group-Object model, mode, run, scenario | Where-Object Count -gt 1)
+if ($duplicates) { throw "Duplicate observations: $(($duplicates | ForEach-Object Name) -join '; ')" }
 $done = @($rows | Where-Object { $_.execution -eq 'COMPLETED' })
 $expectedRuns = ($rows | ForEach-Object { [int]$_.run } | Measure-Object -Maximum).Maximum
 

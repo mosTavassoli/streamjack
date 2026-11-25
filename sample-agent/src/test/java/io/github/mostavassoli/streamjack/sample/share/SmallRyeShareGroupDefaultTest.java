@@ -23,10 +23,10 @@ class SmallRyeShareGroupDefaultTest {
 
     @Test
     void observe() throws Exception {
-        int analyses = ShareGroupAgentSupport.analysesOf(bootstrapServers, "T-8101", Duration.ofSeconds(10));
+        var analyses = ShareGroupAgentSupport.analysesOf(bootstrapServers, "T-8101", Duration.ofSeconds(10));
         System.out.println("SHARE-GROUP RESULT A (default max age, 3 s work, 2 s lock): analyses=" + analyses);
         // Stall check: is a second ticket ever processed after the first one could not be acknowledged?
-        int second = ShareGroupAgentSupport.analysesOf(bootstrapServers, "T-8111", Duration.ofSeconds(10),
+        var second = ShareGroupAgentSupport.analysesOf(bootstrapServers, "T-8111", Duration.ofSeconds(10),
                 Duration.ofSeconds(45));
         System.out.println("SHARE-GROUP RESULT A2 (second ticket afterwards): analyses=" + second);
     }

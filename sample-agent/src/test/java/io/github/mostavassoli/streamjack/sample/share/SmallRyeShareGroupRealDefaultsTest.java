@@ -28,13 +28,13 @@ class SmallRyeShareGroupRealDefaultsTest {
     @Test
     void observe() throws Exception {
         long start = System.nanoTime();
-        int first = ShareGroupAgentSupport.analysesOf(bootstrapServers, "T-8201", Duration.ofSeconds(45),
+        var first = ShareGroupAgentSupport.analysesOf(bootstrapServers, "T-8201", Duration.ofSeconds(45),
                 Duration.ofSeconds(300));
-        System.out.printf("SHARE-GROUP RESULT REAL (30 s lock, 5 s renew, 60 s max age, 40 s work): first=%d after %d s%n",
+        System.out.printf("SHARE-GROUP RESULT REAL (30 s lock, 5 s renew, 60 s max age, 40 s work): first %s after %d s%n",
                 first, Duration.ofNanos(System.nanoTime() - start).toSeconds());
-        int second = ShareGroupAgentSupport.analysesOf(bootstrapServers, "T-8211", Duration.ofSeconds(45),
+        var second = ShareGroupAgentSupport.analysesOf(bootstrapServers, "T-8211", Duration.ofSeconds(45),
                 Duration.ofSeconds(150));
-        System.out.printf("SHARE-GROUP RESULT REAL second ticket: analyses=%d after %d s%n",
+        System.out.printf("SHARE-GROUP RESULT REAL second ticket: %s after %d s%n",
                 second, Duration.ofNanos(System.nanoTime() - start).toSeconds());
     }
 

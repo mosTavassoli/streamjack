@@ -2,9 +2,13 @@
 param(
     [string[]]$Models = @('qwen3:1.7b', 'llama3.2:3b'),
     [int]$Runs = 20,
-    [string]$Out = (Join-Path ([IO.Path]::GetTempPath()) ("streamjack-defense-levels-" + (Get-Date -Format 'yyyyMMdd-HHmmss')))
+    [string]$Out = (Join-Path ([IO.Path]::GetTempPath()) ("streamjack-defense-levels-" + (Get-Date -Format 'yyyyMMdd-HHmmss'))),
+    # The local Ollama server used by both the agent and the ollama CLI; pinning both avoids checking a different server.
+    [string]$OllamaHost = '127.0.0.1:11434'
 )
 $ErrorActionPreference = 'Continue'
+$env:OLLAMA_HOST = $OllamaHost
+$env:OLLAMA_BASE_URL = "http://$OllamaHost"
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $ollama = (Get-Command ollama -ErrorAction SilentlyContinue).Source
 if (!$ollama) { $ollama = Join-Path $env:LOCALAPPDATA 'Programs\Ollama\ollama.exe' }
@@ -25,9 +29,9 @@ foreach ($model in $Models) {
     $agentDir = Join-Path $dir 'agent'
     Copy-Item (Join-Path $root 'sample-agent\target\quarkus-app') $agentDir -Recurse
 
-    # Unload other models so the per-run check sees only the model under test.
-    & $ollama ps | Select-Object -Skip 1 | ForEach-Object { ($_ -split '\s+')[0] } | Where-Object { $_ } |
-        ForEach-Object { & $ollama stop $_ *> $null }
+    # Unload only this benchmark's other models, so the per-run check cannot be satisfied by a model left loaded
+    # from a previous step. Models this benchmark does not use are left alone.
+    foreach ($other in $Models | Where-Object { $_ -ne $model }) { & $ollama stop $other *> $null }
     @{ model = $model; ollama = (& $ollama --version) -join ' '
        modelInfo = (& $ollama list | Select-String ([regex]::Escape($model))).Line
        streamjack = (git -C $root rev-parse --short HEAD); started = (Get-Date).ToString('s') } |

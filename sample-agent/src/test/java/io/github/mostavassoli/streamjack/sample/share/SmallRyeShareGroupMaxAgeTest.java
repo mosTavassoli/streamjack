@@ -23,7 +23,7 @@ class SmallRyeShareGroupMaxAgeTest {
 
     @Test
     void observe() throws Exception {
-        int analyses = ShareGroupAgentSupport.analysesOf(bootstrapServers, "T-8102", Duration.ofSeconds(15));
+        var analyses = ShareGroupAgentSupport.analysesOf(bootstrapServers, "T-8102", Duration.ofSeconds(15));
         System.out.println("SHARE-GROUP RESULT B (4 s max age, 6 s work, 2 s lock): analyses=" + analyses);
     }
 
