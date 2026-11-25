@@ -9,20 +9,23 @@ public class ModelGateway implements TicketModel {
 
     private final AgentConfiguration configuration;
     private final ScriptedTicketModel scripted;
-    private final HardenedTicketAiService hardenedAiService;
-    private final VulnerableTicketAiService vulnerableAiService;
+    private final HardenedTicketAiService securityAwareAiService;
+    private final NeutralTicketAiService neutralAiService;
+    private final VulnerableTicketAiService permissiveAiService;
     private final PromptRenderer promptRenderer;
 
     public ModelGateway(
             AgentConfiguration configuration,
             ScriptedTicketModel scripted,
-            HardenedTicketAiService hardenedAiService,
-            VulnerableTicketAiService vulnerableAiService,
+            HardenedTicketAiService securityAwareAiService,
+            NeutralTicketAiService neutralAiService,
+            VulnerableTicketAiService permissiveAiService,
             PromptRenderer promptRenderer) {
         this.configuration = configuration;
         this.scripted = scripted;
-        this.hardenedAiService = hardenedAiService;
-        this.vulnerableAiService = vulnerableAiService;
+        this.securityAwareAiService = securityAwareAiService;
+        this.neutralAiService = neutralAiService;
+        this.permissiveAiService = permissiveAiService;
         this.promptRenderer = promptRenderer;
     }
 
@@ -32,8 +35,10 @@ public class ModelGateway implements TicketModel {
             return scripted.analyze(input);
         }
         String prompt = promptRenderer.render(input);
-        return configuration.securityMode().defensivePrompt()
-                ? hardenedAiService.analyze(prompt)
-                : vulnerableAiService.analyze(prompt);
+        return switch (configuration.securityMode().promptStyle()) {
+            case SECURITY_AWARE -> securityAwareAiService.analyze(prompt);
+            case NEUTRAL -> neutralAiService.analyze(prompt);
+            case PERMISSIVE -> permissiveAiService.analyze(prompt);
+        };
     }
 }

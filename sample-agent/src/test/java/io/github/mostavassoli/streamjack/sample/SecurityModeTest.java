@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.mostavassoli.streamjack.sample.config.AgentConfiguration;
 import io.github.mostavassoli.streamjack.sample.config.AgentConfiguration.ModelProvider;
+import io.github.mostavassoli.streamjack.sample.config.AgentConfiguration.PromptStyle;
 import io.github.mostavassoli.streamjack.sample.config.AgentConfiguration.SecurityMode;
 import io.github.mostavassoli.streamjack.sample.customer.CustomerDirectory;
 import io.github.mostavassoli.streamjack.sample.domain.Disposition;
@@ -44,28 +45,39 @@ class SecurityModeTest {
     }
 
     @Test
-    void promptOnlyIsTheDefensivePromptWithoutApplicationControls() {
-        assertThat(SecurityMode.HARDENED.defensivePrompt()).isTrue();
-        assertThat(SecurityMode.HARDENED.applicationControls()).isTrue();
-        assertThat(SecurityMode.PROMPT_ONLY.defensivePrompt()).isTrue();
+    void eachComparisonChangesOneLayer() {
+        // NEUTRAL vs PROMPT_ONLY: only the security guidance differs.
+        assertThat(SecurityMode.NEUTRAL.promptStyle()).isEqualTo(PromptStyle.NEUTRAL);
+        assertThat(SecurityMode.PROMPT_ONLY.promptStyle()).isEqualTo(PromptStyle.SECURITY_AWARE);
+        assertThat(SecurityMode.NEUTRAL.applicationControls()).isFalse();
         assertThat(SecurityMode.PROMPT_ONLY.applicationControls()).isFalse();
-        assertThat(SecurityMode.VULNERABLE.defensivePrompt()).isFalse();
+        // PROMPT_ONLY vs HARDENED: only the application controls differ.
+        assertThat(SecurityMode.HARDENED.promptStyle()).isEqualTo(PromptStyle.SECURITY_AWARE);
+        assertThat(SecurityMode.HARDENED.applicationControls()).isTrue();
+        assertThat(SecurityMode.VULNERABLE.promptStyle()).isEqualTo(PromptStyle.PERMISSIVE);
         assertThat(SecurityMode.VULNERABLE.applicationControls()).isFalse();
     }
 
     @ParameterizedTest
     @EnumSource(SecurityMode.class)
-    void realModelsUseTheDefensivePromptOnlyWhenTheModeHasIt(SecurityMode mode) {
-        TicketAnalysis hardened = analysis("hardened");
-        TicketAnalysis vulnerable = analysis("vulnerable");
+    void realModelsUseThePromptOfTheMode(SecurityMode mode) {
+        TicketAnalysis securityAware = analysis("security-aware");
+        TicketAnalysis neutral = analysis("neutral");
+        TicketAnalysis permissive = analysis("permissive");
         ModelGateway gateway = new ModelGateway(
-                configuration(ModelProvider.OLLAMA, mode),
+                configuration(ModelProvider.OPENAI, mode),
                 new ScriptedTicketModel(),
-                prompt -> hardened,
-                prompt -> vulnerable,
+                prompt -> securityAware,
+                prompt -> neutral,
+                prompt -> permissive,
                 new PromptRenderer(new ObjectMapper()));
 
-        assertThat(gateway.analyze(input())).isSameAs(mode.defensivePrompt() ? hardened : vulnerable);
+        TicketAnalysis expected = switch (mode.promptStyle()) {
+            case SECURITY_AWARE -> securityAware;
+            case NEUTRAL -> neutral;
+            case PERMISSIVE -> permissive;
+        };
+        assertThat(gateway.analyze(input())).isSameAs(expected);
     }
 
     private static TicketAnalysis analysis(String summary) {

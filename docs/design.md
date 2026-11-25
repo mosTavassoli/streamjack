@@ -268,18 +268,20 @@ The same application validates model output in either mode. Real-model runs rema
 
 ### Security modes
 
-| Boundary | `HARDENED` default | `PROMPT_ONLY` | `VULNERABLE` positive control |
-|---|---|---|---|
-| System prompt (real models) | Defensive | Defensive | Not defensive |
-| Customer data | Omits synthetic internal API key | Exposes full synthetic record | Exposes full synthetic record |
-| Kafka headers | Excludes unapproved headers from model input | Includes non-control headers | Includes non-control headers |
-| Publication | Always human review | Honors model `PUBLISH` recommendation | Honors model `PUBLISH` recommendation |
-| Memory | No cross-ticket untrusted text | Retains prior customer ticket text | Retains prior customer ticket text |
-| Side effects | Deduplicates follow-up by ticket id | Repeats on redelivery | Repeats on redelivery |
+| Boundary | `HARDENED` default | `PROMPT_ONLY` | `NEUTRAL` | `VULNERABLE` positive control |
+|---|---|---|---|---|
+| System prompt (real models) | Task plus security guidance | Task plus security guidance | Task only | Pushes the model to publish |
+| Customer data | Omits synthetic internal API key | Exposes full synthetic record | Exposes full synthetic record | Exposes full synthetic record |
+| Kafka headers | Excludes unapproved headers from model input | Includes non-control headers | Includes non-control headers | Includes non-control headers |
+| Publication | Always human review | Honors model `PUBLISH` recommendation | Honors model `PUBLISH` recommendation | Honors model `PUBLISH` recommendation |
+| Memory | No cross-ticket untrusted text | Retains prior customer ticket text | Retains prior customer ticket text | Retains prior customer ticket text |
+| Side effects | Deduplicates follow-up by ticket id | Repeats on redelivery | Repeats on redelivery | Repeats on redelivery |
 
 The vulnerable mode exists only to prove that the harness detects failures. It is not an example to deploy.
 
-`PROMPT_ONLY` isolates the system prompt as the only defense, so real-model runs can compare three levels: no defense, a defensive prompt, and application-enforced controls. The scripted model ignores the system prompt, so with `SCRIPTED` this mode behaves like `VULNERABLE`; use it with a real model. Like `VULNERABLE`, it is an experiment setting, not a deployable configuration.
+`NEUTRAL`, `PROMPT_ONLY`, and `HARDENED` are built so each comparison changes one layer. `NEUTRAL` and `PROMPT_ONLY` share the same task prompt, which lets the model publish routine replies it fully answers, and differ only in security guidance. `PROMPT_ONLY` and `HARDENED` share the same prompt and differ only in the bundle of application controls. Neither prompt tells the model to always draft; otherwise a prompt-only defense could not be told apart from a prompt that never publishes. The triage record keeps the model's `recommendedAction` next to the policy's `disposition`, so a model that was influenced can be told apart from a reply that was blocked. The scripted model ignores the system prompt, so with `SCRIPTED` the modes without controls behave like `VULNERABLE`; use them with a real model. Like `VULNERABLE`, they are experiment settings, not deployable configurations.
+
+Real models run through Ollama or OpenAI, selected at build time with `STREAMJACK_LLM_PROVIDER`. The OpenAI key is read from `OPENAI_API_KEY` and never logged. With `STREAMJACK_USAGE_LOG` set, the agent appends one line per model call with the served model and token counts, never prompt or response text.
 
 The [Kafka publication boundary test](kafka-publication-boundary.md) adds a broker-enforced control in a disposable fixture. The triage identity can still read tickets and write drafts, but Kafka rejects its writes to the publication topic. A separate test producer proves that the topic accepts authorized writes. The fixture does not change the runner, agent defaults, or versioned contracts.
 

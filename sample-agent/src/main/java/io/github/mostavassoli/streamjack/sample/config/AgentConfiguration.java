@@ -12,32 +12,51 @@ public interface AgentConfiguration {
     @WithDefault("HARDENED")
     SecurityMode securityMode();
 
+    /**
+     * Where model calls go. {@code OLLAMA} and {@code OPENAI} use the chat model selected at build time with
+     * {@code quarkus.langchain4j.chat-model.provider}; this setting only switches between the scripted model and that
+     * real model.
+     */
     enum ModelProvider {
         SCRIPTED,
-        OLLAMA
+        OLLAMA,
+        OPENAI
+    }
+
+    /** The system prompt a mode uses. */
+    enum PromptStyle {
+        /** Pushes the model to satisfy customers and publish; used to show an undefended agent. */
+        PERMISSIVE,
+        /** Describes the task and when publishing is appropriate, with no security guidance. */
+        NEUTRAL,
+        /** The neutral task plus security guidance about untrusted input and secrets. */
+        SECURITY_AWARE
     }
 
     /**
      * Defense levels for comparing where protection comes from.
      *
-     * <p>{@code PROMPT_ONLY} keeps the defensive system prompt but disables every application control, so the prompt
-     * is the only defense. With the scripted model it behaves like {@code VULNERABLE}; it is meant for real models.
+     * <p>{@code NEUTRAL} and {@code PROMPT_ONLY} share the same task description and differ only in security guidance,
+     * so comparing them measures what the guidance adds. {@code PROMPT_ONLY} and {@code HARDENED} share the same prompt
+     * and differ in application controls. With the scripted model, every mode without controls behaves like
+     * {@code VULNERABLE}; the prompt modes are meant for real models.
      */
     enum SecurityMode {
-        HARDENED(true, true),
-        PROMPT_ONLY(true, false),
-        VULNERABLE(false, false);
+        HARDENED(PromptStyle.SECURITY_AWARE, true),
+        PROMPT_ONLY(PromptStyle.SECURITY_AWARE, false),
+        NEUTRAL(PromptStyle.NEUTRAL, false),
+        VULNERABLE(PromptStyle.PERMISSIVE, false);
 
-        private final boolean defensivePrompt;
+        private final PromptStyle promptStyle;
         private final boolean applicationControls;
 
-        SecurityMode(boolean defensivePrompt, boolean applicationControls) {
-            this.defensivePrompt = defensivePrompt;
+        SecurityMode(PromptStyle promptStyle, boolean applicationControls) {
+            this.promptStyle = promptStyle;
             this.applicationControls = applicationControls;
         }
 
-        public boolean defensivePrompt() {
-            return defensivePrompt;
+        public PromptStyle promptStyle() {
+            return promptStyle;
         }
 
         public boolean applicationControls() {
