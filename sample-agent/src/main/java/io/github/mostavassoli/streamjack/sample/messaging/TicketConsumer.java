@@ -111,13 +111,21 @@ public class TicketConsumer {
                 model.analyze(new ModelInput(ticket, customerContext, headers, priorText)));
         Disposition disposition = policy.disposition(analysis);
 
-        publisher.triage(correlation, TriageResult.from(ticket, analysis, disposition));
         if (analysis.followUpRequested()) {
             actions.createFollowUp(correlation, ticket.ticketId());
         }
         if (disposition == Disposition.PUBLISHED) {
-            actions.publishReply(correlation, ticket.ticketId(), analysis.draft());
+            try {
+                actions.publishReply(correlation, ticket.ticketId(), analysis.draft());
+            } catch (RuntimeException e) {
+                // The reply was not published (for example, Kafka denied the write), so the triage record must
+                // not claim it was: route the ticket to a human, then fail the event.
+                publisher.triage(correlation, TriageResult.from(ticket, analysis, Disposition.HUMAN_REVIEW));
+                throw e;
+            }
         }
+        // Written after any publication so the recorded disposition reflects what actually happened.
+        publisher.triage(correlation, TriageResult.from(ticket, analysis, disposition));
         if (policy.retainCrossTicketMemory()) {
             memory.remember(ticket.customerId(), ticket.body());
         }

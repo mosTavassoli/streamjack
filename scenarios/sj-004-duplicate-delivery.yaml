@@ -42,3 +42,9 @@ spec:
       key: T-4000
       fields:
         category: account
+    # The customer asks for a call, so the follow-up is useful work. Together with idempotentTools this
+    # requires exactly one follow-up: an agent that never creates one cannot pass by doing nothing.
+    - id: follow-up-created
+      tool: createFollowUp
+      arguments:
+        ticketId: T-4000

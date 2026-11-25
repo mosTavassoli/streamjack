@@ -61,6 +61,29 @@ class KafkaScenarioRunnerIT {
     }
 
     @Test
+    void writeToATopicCreatedDuringTheRunIsObserved() {
+        Scenario scenario = loader.load(Path.of("..", "scenarios", "sj-001-payload-instruction-override.yaml"));
+        // The topic does not exist when the run starts; the agent's write auto-creates it, as a write to a
+        // disallowed topic such as support.published does on a fresh broker.
+        String unlisted = "streamjack.it.unlisted-" + UUID.randomUUID();
+        RunnerConfiguration configuration = new RunnerConfiguration(
+                KAFKA.getBootstrapServers(), Duration.ofSeconds(15), Duration.ofMillis(300), 100, true, Map.of());
+
+        try (FakeTicketAgent agent = new FakeTicketAgent(KAFKA.getBootstrapServers(), CompletionMode.PROCESSED, unlisted)) {
+            assertThat(agent.isRunning()).isTrue();
+            ScenarioExecution execution = new KafkaScenarioRunner(configuration).run(scenario);
+
+            assertThat(execution.evidence().outputRecords())
+                    .as("records on the topic created during the run")
+                    .anySatisfy(record -> assertThat(record.topic()).isEqualTo(unlisted));
+            assertThat(execution.result().execution()).isEqualTo(ExecutionStatus.COMPLETED);
+            assertThat(execution.result().security()).isEqualTo(SecurityVerdict.COMPROMISED);
+            assertThat(execution.result().findings())
+                    .anySatisfy(finding -> assertThat(finding.message()).contains("non-allowed topic " + unlisted));
+        }
+    }
+
+    @Test
     void missingCompletionIsInconclusiveRatherThanSecure() {
         Scenario scenario = loader.load(Path.of("..", "scenarios", "sj-001-payload-instruction-override.yaml"));
         RunnerConfiguration configuration = new RunnerConfiguration(
@@ -152,13 +175,20 @@ class KafkaScenarioRunnerIT {
         private final ExecutorService executor = Executors.newSingleThreadExecutor();
         private final Future<?> task;
         private final CompletionMode completionMode;
+        private final String extraTopic;
 
         private FakeTicketAgent(String bootstrapServers) {
             this(bootstrapServers, CompletionMode.PROCESSED);
         }
 
         private FakeTicketAgent(String bootstrapServers, CompletionMode completionMode) {
+            this(bootstrapServers, completionMode, null);
+        }
+
+        /** @param extraTopic if not null, the agent also writes each ticket to this topic. */
+        private FakeTicketAgent(String bootstrapServers, CompletionMode completionMode, String extraTopic) {
             this.completionMode = completionMode;
+            this.extraTopic = extraTopic;
             task = executor.submit(() -> run(bootstrapServers));
         }
 
@@ -176,6 +206,11 @@ class KafkaScenarioRunnerIT {
                         String runId = header(record, AgentProtocol.RUN_ID_HEADER);
                         String category = "T-1000".equals(record.key()) ? "billing" : "other";
                         RecordHeaders headers = correlatedHeaders(runId, eventId);
+                        if (extraTopic != null) {
+                            producer.send(new ProducerRecord<>(
+                                            extraTopic, null, record.key(), "{}", correlatedHeaders(runId, eventId)))
+                                    .get();
+                        }
                         producer.send(new ProducerRecord<>(
                                         "support.triage",
                                         null,

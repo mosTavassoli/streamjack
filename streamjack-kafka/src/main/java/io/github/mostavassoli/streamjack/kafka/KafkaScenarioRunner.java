@@ -36,6 +36,8 @@ import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.common.PartitionInfo;
+import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.header.Header;
 import org.apache.kafka.common.header.Headers;
 import org.apache.kafka.common.header.internals.RecordHeaders;
@@ -48,6 +50,7 @@ public final class KafkaScenarioRunner {
     private static final Pattern ALL_NON_INTERNAL_TOPICS = Pattern.compile("^(?!__).+");
     private static final Duration ASSIGNMENT_TIMEOUT = Duration.ofSeconds(10);
     private static final Duration POLL_INTERVAL = Duration.ofMillis(200);
+    private static final Duration PARTITION_REFRESH_INTERVAL = Duration.ofMillis(500);
 
     private final RunnerConfiguration configuration;
     private final Evaluator evaluator;
@@ -81,8 +84,7 @@ public final class KafkaScenarioRunner {
         boolean quietPeriodCompleted;
         try (KafkaConsumer<String, String> consumer = new KafkaConsumer<>(consumerProperties());
                 KafkaProducer<String, String> producer = new KafkaProducer<>(producerProperties())) {
-            consumer.subscribe(ALL_NON_INTERNAL_TOPICS);
-            awaitAssignmentAndSeekToEnd(consumer);
+            assignAllAndSeekToEnd(consumer);
             produceScenario(producer, scenario, runId);
             quietPeriodCompleted = collectEvidence(
                     consumer,
@@ -144,16 +146,57 @@ public final class KafkaScenarioRunner {
         }
     }
 
-    private void awaitAssignmentAndSeekToEnd(KafkaConsumer<String, String> consumer) {
-        Instant deadline = Instant.now().plus(min(configuration.observationTimeout(), ASSIGNMENT_TIMEOUT));
-        while (consumer.assignment().isEmpty() && Instant.now().isBefore(deadline)) {
-            consumer.poll(POLL_INTERVAL);
+    /**
+     * Observes every existing non-internal partition from its current end. Partitions are assigned directly rather
+     * than through a consumer group: a group rebalance would reset partitions without committed offsets to the
+     * earliest offset, so old records would be read again as if they were new.
+     */
+    private void assignAllAndSeekToEnd(KafkaConsumer<String, String> consumer) {
+        Set<TopicPartition> partitions = observablePartitions(consumer, min(configuration.observationTimeout(), ASSIGNMENT_TIMEOUT));
+        if (partitions.isEmpty()) {
+            throw new KafkaRunnerException("Kafka observer found no topics to observe");
         }
-        if (consumer.assignment().isEmpty()) {
-            throw new KafkaRunnerException("Kafka consumer received no topic assignment");
+        consumer.assign(partitions);
+        consumer.seekToEnd(partitions);
+        partitions.forEach(consumer::position);
+    }
+
+    /**
+     * Starts observing partitions that appeared after observation started (for example, a topic the agent
+     * auto-created by writing to a disallowed topic) from their beginning. Returns whether any were added.
+     */
+    private static boolean observeNewPartitions(KafkaConsumer<String, String> consumer, Duration remaining) {
+        Set<TopicPartition> added = observablePartitions(consumer, remaining);
+        added.removeAll(consumer.assignment());
+        if (added.isEmpty()) {
+            return false;
         }
-        consumer.seekToEnd(consumer.assignment());
-        consumer.assignment().forEach(consumer::position);
+        Set<TopicPartition> all = new HashSet<>(consumer.assignment());
+        all.addAll(added);
+        consumer.assign(all);
+        consumer.seekToBeginning(added);
+        return true;
+    }
+
+    /** Whether every observed partition has been read up to its current end (last stable offset). */
+    private static boolean caughtUp(KafkaConsumer<String, String> consumer, Duration timeout) {
+        Map<TopicPartition, Long> ends = consumer.endOffsets(consumer.assignment(), timeout);
+        for (Map.Entry<TopicPartition, Long> end : ends.entrySet()) {
+            if (consumer.position(end.getKey(), timeout) < end.getValue()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static Set<TopicPartition> observablePartitions(KafkaConsumer<String, String> consumer, Duration timeout) {
+        Set<TopicPartition> partitions = new HashSet<>();
+        for (Map.Entry<String, List<PartitionInfo>> topic : consumer.listTopics(timeout).entrySet()) {
+            if (ALL_NON_INTERNAL_TOPICS.matcher(topic.getKey()).matches()) {
+                topic.getValue().forEach(info -> partitions.add(new TopicPartition(info.topic(), info.partition())));
+            }
+        }
+        return partitions;
     }
 
     private void produceScenario(KafkaProducer<String, String> producer, Scenario scenario, String runId) {
@@ -188,15 +231,42 @@ public final class KafkaScenarioRunner {
         long started = System.nanoTime();
         Duration timeout = configuration.observationTimeout();
         Duration quietUntil = null;
+        Duration nextPartitionRefresh = PARTITION_REFRESH_INTERVAL;
         int evidenceRecords = 0;
 
         while (true) {
             Duration elapsed = Duration.ofNanos(System.nanoTime() - started);
-            if (quietUntil != null && quietUntil.compareTo(timeout) <= 0 && elapsed.compareTo(quietUntil) >= 0) {
-                return true;
-            }
             if (elapsed.compareTo(timeout) >= 0) {
                 return false;
+            }
+            Duration remaining = timeout.minus(elapsed);
+            if (quietUntil != null && quietUntil.compareTo(timeout) <= 0 && elapsed.compareTo(quietUntil) >= 0) {
+                // Before ending, make sure nothing written is unread: a topic that did not exist when observation
+                // started (for example, one the agent auto-created by writing to a disallowed topic) or records
+                // not yet fetched. Otherwise that evidence would be silently dropped. Keep observing instead; the
+                // observation timeout still bounds the run.
+                boolean drained;
+                try {
+                    drained = !observeNewPartitions(consumer, remaining) && caughtUp(consumer, remaining);
+                } catch (org.apache.kafka.common.errors.TimeoutException e) {
+                    // Not confirmed in the time left; the observation timeout makes the run inconclusive.
+                    drained = false;
+                }
+                if (drained) {
+                    return true;
+                }
+                quietUntil = elapsed.plus(configuration.quietPeriod());
+                continue;
+            }
+            if (elapsed.compareTo(nextPartitionRefresh) >= 0) {
+                // Topics created just before observation started (including the audit topic) may be missing
+                // from the first listing, and agents can create topics at any time.
+                try {
+                    observeNewPartitions(consumer, remaining);
+                } catch (org.apache.kafka.common.errors.TimeoutException e) {
+                    // Retried at the next refresh; the final drain check still guards the result.
+                }
+                nextPartitionRefresh = elapsed.plus(PARTITION_REFRESH_INTERVAL);
             }
             Duration nextBoundary = quietUntil == null ? timeout : min(quietUntil, timeout);
             ConsumerRecords<String, String> records = consumer.poll(min(POLL_INTERVAL, nextBoundary.minus(elapsed)));
@@ -301,7 +371,7 @@ public final class KafkaScenarioRunner {
     private Properties consumerProperties() {
         Properties properties = baseProperties();
         properties.put(ConsumerConfig.CLIENT_ID_CONFIG, "streamjack-observer");
-        properties.put(ConsumerConfig.GROUP_ID_CONFIG, "streamjack-" + UUID.randomUUID());
+        // No group id: partitions are assigned directly and offsets are never committed.
         properties.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
         properties.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
         properties.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");

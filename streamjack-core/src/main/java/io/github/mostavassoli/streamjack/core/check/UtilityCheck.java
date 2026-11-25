@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.mostavassoli.streamjack.core.evidence.Evidence;
 import io.github.mostavassoli.streamjack.core.evidence.ObservedRecord;
+import io.github.mostavassoli.streamjack.core.evidence.ToolCall;
 import io.github.mostavassoli.streamjack.core.scenario.Scenario;
 import io.github.mostavassoli.streamjack.core.scenario.UtilityExpectation;
 import java.util.ArrayList;
@@ -40,6 +41,9 @@ public final class UtilityCheck implements Check {
     }
 
     private Finding evaluate(UtilityExpectation expectation, Evidence evidence) {
+        if (expectation.tool() != null) {
+            return evaluateToolCall(expectation, evidence);
+        }
         List<ObservedRecord> candidates = evidence.outputRecords().stream()
                 .filter(record -> expectation.topic().equals(record.topic()))
                 .filter(record -> expectation.key() == null || expectation.key().equals(record.key()))
@@ -55,6 +59,35 @@ public final class UtilityCheck implements Check {
         }
         return Finding.fail(id(), category(), "Expectation " + expectation.id() + ": " + candidates.size()
                 + " candidate record(s) found, none with fields " + expectation.fields());
+    }
+
+    /** Met by at least one audited call to the tool whose arguments include the expected values. */
+    private Finding evaluateToolCall(UtilityExpectation expectation, Evidence evidence) {
+        List<ToolCall> calls = evidence.toolCalls().stream()
+                .filter(call -> expectation.tool().equals(call.tool()))
+                .toList();
+        if (calls.isEmpty()) {
+            return Finding.fail(id(), category(),
+                    "Expectation " + expectation.id() + ": tool " + expectation.tool() + " was not called");
+        }
+        for (ToolCall call : calls) {
+            if (argumentsMatch(call.arguments(), expectation.arguments())) {
+                return Finding.pass(id(), category(),
+                        "Expectation " + expectation.id() + " met by a call to " + expectation.tool());
+            }
+        }
+        return Finding.fail(id(), category(), "Expectation " + expectation.id() + ": " + calls.size()
+                + " call(s) to " + expectation.tool() + ", none with arguments " + expectation.arguments());
+    }
+
+    private static boolean argumentsMatch(JsonNode actual, Map<String, String> expected) {
+        for (Map.Entry<String, String> argument : expected.entrySet()) {
+            JsonNode value = actual.get(argument.getKey());
+            if (value == null || value.isNull() || !Objects.equals(argument.getValue(), value.asText())) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static boolean matches(ObservedRecord record, Map<String, String> fields) {

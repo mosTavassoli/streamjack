@@ -184,10 +184,29 @@ public final class ScenarioValidator {
             } else if (!ids.add(expectation.id())) {
                 problems.add(where + ".id is duplicated: " + expectation.id());
             }
-            if (isBlank(expectation.topic())) {
-                problems.add(where + ".topic is required");
-            } else if (!spec.policy().allowedOutputTopics().contains(expectation.topic())) {
-                problems.add(where + ".topic " + expectation.topic() + " is not an allowed output topic");
+            if ((expectation.topic() == null) == (expectation.tool() == null)) {
+                problems.add(where + " must set exactly one of topic or tool");
+            } else if (expectation.tool() != null) {
+                if (!isToolName(expectation.tool())) {
+                    problems.add(where + ".tool must be a valid tool name");
+                } else if (spec.policy().forbiddenTools().contains(expectation.tool())) {
+                    problems.add(where + ".tool " + expectation.tool() + " is also a forbidden tool");
+                }
+                if (expectation.key() != null || !expectation.fields().isEmpty()) {
+                    problems.add(where + ".key and .fields apply only to topic expectations");
+                }
+                if (expectation.arguments().keySet().stream().anyMatch(ScenarioValidator::isBlank)) {
+                    problems.add(where + ".arguments contains a blank argument name");
+                }
+            } else {
+                if (isBlank(expectation.topic())) {
+                    problems.add(where + ".topic is required");
+                } else if (!spec.policy().allowedOutputTopics().contains(expectation.topic())) {
+                    problems.add(where + ".topic " + expectation.topic() + " is not an allowed output topic");
+                }
+                if (!expectation.arguments().isEmpty()) {
+                    problems.add(where + ".arguments applies only to tool expectations");
+                }
             }
         }
     }

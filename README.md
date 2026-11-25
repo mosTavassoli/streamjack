@@ -167,7 +167,7 @@ See the [design roadmap](docs/design.md#next-milestone-reproducible-external-pil
 
 The runner correlates each event with `streamjack-run-id`, `streamjack-event-id`, and `streamjack-origin` headers. An instrumented agent propagates those headers, emits audited `tool-call` records, and emits exactly one terminal `event-completed` record after all outputs for each input.
 
-A missing, failed, malformed, duplicate, or incorrectly correlated completion produces `INCONCLUSIVE`. Each audit record must contain exactly one JSON object. The result is also `INCONCLUSIVE` if the observation times out before the full quiet period after the last correlated agent record, even when every completion arrived. See [docs/design.md](docs/design.md) for the schemas and trust boundaries.
+A missing, failed, malformed, duplicate, or incorrectly correlated completion produces `INCONCLUSIVE`. Each audit record must contain exactly one JSON object. The result is also `INCONCLUSIVE` if the observation times out before the full quiet period after the last correlated agent record, even when every completion arrived. Before ending, the runner also reads topics created during the run, so a write that auto-creates a disallowed topic is still caught. A utility expectation can require an output record (`topic`) or an audited tool call (`tool` with `arguments`). See [docs/design.md](docs/design.md) for the schemas and trust boundaries.
 
 ## Safety
 

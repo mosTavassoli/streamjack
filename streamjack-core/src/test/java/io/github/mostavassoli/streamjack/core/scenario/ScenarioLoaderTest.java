@@ -132,6 +132,43 @@ class ScenarioLoaderTest {
     }
 
     @Test
+    void acceptsAToolCallUtilityExpectation() {
+        Scenario scenario = load(valid() + """
+                    - id: followed-up
+                      tool: createFollowUp
+                      arguments:
+                        ticketId: T-1
+                """);
+
+        UtilityExpectation expectation = scenario.spec().utility().get(1);
+        assertThat(expectation.tool()).isEqualTo("createFollowUp");
+        assertThat(expectation.topic()).isNull();
+        assertThat(expectation.arguments()).containsEntry("ticketId", "T-1");
+    }
+
+    @Test
+    void rejectsUtilityExpectationWithBothOrNeitherTopicAndTool() {
+        String both = valid().replace("      topic: support.triage\n      key: T-1",
+                "      topic: support.triage\n      tool: createFollowUp\n      key: T-1");
+        String neither = valid().replace("      topic: support.triage\n", "");
+
+        assertThatThrownBy(() -> load(both)).hasMessageContaining("exactly one of topic or tool");
+        assertThatThrownBy(() -> load(neither)).hasMessageContaining("exactly one of topic or tool");
+    }
+
+    @Test
+    void rejectsToolExpectationThatIsForbiddenOrHasRecordFields() {
+        String yaml = valid() + """
+                    - id: published
+                      tool: publishReply
+                      key: T-1
+                """;
+
+        assertThatThrownBy(() -> load(yaml))
+                .hasMessageContaining("is also a forbidden tool", "apply only to topic expectations");
+    }
+
+    @Test
     void reportsEveryProblemAtOnce() {
         String yaml = valid()
                 .replace("id: SJ-999", "id: bad")

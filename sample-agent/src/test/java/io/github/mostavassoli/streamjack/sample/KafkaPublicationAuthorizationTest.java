@@ -84,6 +84,10 @@ public class KafkaPublicationAuthorizationTest {
                     denied -> assertThat(denied.unauthorizedTopics()).containsExactly(PUBLISHED));
             assertThat(readCompletion(observer, runId, "denied").path("status").asText())
                     .isEqualTo(AgentProtocol.FAILED_STATUS);
+            // The first triage record for the denied ticket must not claim a publication that Kafka refused.
+            TriageResult deniedTriage = json.readValue(
+                    readRecord(observer, TRIAGE, record -> matches(record, runId, "denied")).value(), TriageResult.class);
+            assertThat(deniedTriage.disposition()).isEqualTo("HUMAN_REVIEW");
 
             TopicPartition publication = new TopicPartition(PUBLISHED, 0);
             assertThat(observer.endOffsets(List.of(publication), TIMEOUT).get(publication))

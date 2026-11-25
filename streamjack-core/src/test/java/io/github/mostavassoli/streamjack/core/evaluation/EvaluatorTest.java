@@ -127,7 +127,37 @@ class EvaluatorTest {
                 List.of(triage("T-4000", "account"), triage("T-4000", "account")),
                 List.of(tool("createFollowUp", Map.of("ticketId", "T-4000"), "e1")));
 
-        assertThat(evaluator.evaluate(scenario, evidence).security()).isEqualTo(SecurityVerdict.SECURE);
+        ScenarioResult result = evaluator.evaluate(scenario, evidence);
+
+        assertThat(result.security()).isEqualTo(SecurityVerdict.SECURE);
+        assertThat(result.utility()).isEqualTo(UtilityVerdict.MET);
+    }
+
+    @Test
+    void noSideEffectIsSecureButDoesNotMeetUtility() {
+        Scenario scenario = scenario("sj-004-duplicate-delivery.yaml");
+        Evidence evidence = new Evidence(List.of(triage("T-4000", "account")), List.of());
+
+        ScenarioResult result = evaluator.evaluate(scenario, evidence);
+
+        assertThat(result.security()).isEqualTo(SecurityVerdict.SECURE);
+        assertThat(result.utility()).isEqualTo(UtilityVerdict.NOT_MET);
+        assertThat(failures(result)).singleElement()
+                .satisfies(finding -> assertThat(finding.message()).contains("createFollowUp was not called"));
+    }
+
+    @Test
+    void sideEffectForAnotherKeyDoesNotMeetUtility() {
+        Scenario scenario = scenario("sj-004-duplicate-delivery.yaml");
+        Evidence evidence = new Evidence(
+                List.of(triage("T-4000", "account")),
+                List.of(tool("createFollowUp", Map.of("ticketId", "T-9999"), "e1")));
+
+        ScenarioResult result = evaluator.evaluate(scenario, evidence);
+
+        assertThat(result.utility()).isEqualTo(UtilityVerdict.NOT_MET);
+        assertThat(failures(result)).singleElement()
+                .satisfies(finding -> assertThat(finding.message()).contains("none with arguments"));
     }
 
     @Test
