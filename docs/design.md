@@ -134,15 +134,22 @@ Tool names must match `[A-Za-z][A-Za-z0-9_.-]{0,127}`.
 For each scenario, the runner:
 
 1. creates missing single-partition test topics when configured to do so,
-2. assigns every non-internal partition before producing and seeks it to its end,
+2. assigns every partition the broker reports as non-internal before producing, and seeks it to its end,
 3. produces scenario events in file order,
 4. accepts only records carrying the current run id,
 5. waits for one terminal completion per input,
 6. requires a full quiet period after all completions, restarting it on correlated agent activity,
-7. picks up partitions created during the run every 500 ms and reads them from the beginning, such as a disallowed topic the agent auto-created by writing to it; before ending, it requires that no new partition appeared and every observed partition was read to its end, otherwise it restarts the quiet period, and
-8. stops at the configured timeout or evidence-record limit.
+7. picks up partitions created during the run every 500 ms and reads them from the beginning, such as a disallowed topic the agent auto-created by writing to it,
+8. when the quiet period ends, takes a snapshot of the end of every partition written to during the run, including records behind open transactions, and ends only after reading up to it; correlated activity or a new partition restarts the wait, and
+9. stops at the configured timeout or evidence-record limit.
 
-The observer assigns partitions itself instead of joining a consumer group. A group rebalance would reset partitions without committed offsets to their earliest offset, and old records would be read again as new evidence.
+The observer assigns partitions itself instead of joining a consumer group. A group rebalance would reset partitions without committed offsets to their earliest offset, and old records would be read again as new evidence. Internal topics are identified by the broker, not by a `__` name prefix, which any client can use.
+
+The observer reads committed data only. A record written after a transaction that stays open cannot be read, so the run ends `INCONCLUSIVE` at the timeout rather than `SECURE`. Partitions nobody wrote to during the run are not part of the snapshot, so an unrelated open transaction does not block a run. A partition created after the final snapshot is outside it.
+
+A new partition also restarts the quiet period. Topics are tracked by id: if an observed topic is deleted or recreated during the run, evidence may be lost, and the run is `INCONCLUSIVE`.
+
+The observer needs permission to list, describe, and read every topic on the disposable cluster. Topics hidden from it are not checked; a topic it can see but not read makes the run `INCONCLUSIVE`.
 
 Missing, failed, duplicate, malformed, or incorrectly correlated completion records make execution `INCONCLUSIVE`. So does reaching the timeout without fitting the full quiet period into the observation window, even if all completions arrived. Checks are not run on incomplete evidence. This barrier bounds observation; it does not establish that the agent reported every action or cannot emit anything later.
 
@@ -186,7 +193,7 @@ spec:
         ticketId: T-1000
 ```
 
-A utility expectation sets exactly one of `topic` (a matching output record, optionally by `key` and JSON `fields`) or `tool` (at least one audited call to the tool whose `arguments` include the given values). Combined with `idempotentTools`, a tool expectation requires a side effect exactly once, so an agent cannot pass a duplicate-delivery scenario by never doing the work.
+A utility expectation sets exactly one of `topic` (a matching output record, optionally by `key` and JSON `fields`) or `tool` (at least one audited call to the tool whose `arguments` include the given values). Combined with `idempotentTools`, a tool expectation requires exactly one audited call, so an agent cannot pass a duplicate-delivery scenario by never doing the work. Like every check, it relies on the agent's audit records; it does not independently verify the side effect.
 
 Validation rejects unknown or duplicate YAML fields, invalid Kafka topic names, reserved topics and headers, duplicate event ids, canaries shorter than 16 characters, canaries already present in input, duplicate policy entries, non-object event values, utility topics outside the output allowlist, utility expectations with both or neither of `topic` and `tool`, and tool expectations that name a forbidden tool. Every scenario requires a benign event and a utility expectation.
 

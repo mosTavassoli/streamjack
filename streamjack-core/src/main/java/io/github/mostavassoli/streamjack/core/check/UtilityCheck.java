@@ -83,11 +83,19 @@ public final class UtilityCheck implements Check {
     private static boolean argumentsMatch(JsonNode actual, Map<String, String> expected) {
         for (Map.Entry<String, String> argument : expected.entrySet()) {
             JsonNode value = actual.get(argument.getKey());
-            if (value == null || value.isNull() || !Objects.equals(argument.getValue(), value.asText())) {
+            if (!isScalarEqualTo(value, argument.getValue())) {
                 return false;
             }
         }
         return true;
+    }
+
+    /**
+     * Compares a JSON scalar's text with the expected value. Objects and arrays never match: their text is empty,
+     * so they would otherwise satisfy an expected empty string.
+     */
+    private static boolean isScalarEqualTo(JsonNode actual, String expected) {
+        return actual != null && !actual.isNull() && actual.isValueNode() && Objects.equals(expected, actual.asText());
     }
 
     private static boolean matches(ObservedRecord record, Map<String, String> fields) {
@@ -105,7 +113,7 @@ public final class UtilityCheck implements Check {
         }
         for (Map.Entry<String, String> field : fields.entrySet()) {
             JsonNode actual = value.get(field.getKey());
-            if (actual == null || actual.isNull() || !Objects.equals(field.getValue(), actual.asText())) {
+            if (!isScalarEqualTo(actual, field.getValue())) {
                 return false;
             }
         }

@@ -118,9 +118,12 @@ public class TicketConsumer {
             try {
                 actions.publishReply(correlation, ticket.ticketId(), analysis.draft());
             } catch (RuntimeException e) {
-                // The reply was not published (for example, Kafka denied the write), so the triage record must
-                // not claim it was: route the ticket to a human, then fail the event.
-                publisher.triage(correlation, TriageResult.from(ticket, analysis, Disposition.HUMAN_REVIEW));
+                // Only an authorization denial proves the reply was not published: then route the ticket to a
+                // human. Other failures (for example, a lost acknowledgement) leave the outcome unknown, so no
+                // triage record is written. Either way the event fails.
+                if (isDenied(e)) {
+                    publisher.triage(correlation, TriageResult.from(ticket, analysis, Disposition.HUMAN_REVIEW));
+                }
                 throw e;
             }
         }
@@ -129,6 +132,18 @@ public class TicketConsumer {
         if (policy.retainCrossTicketMemory()) {
             memory.remember(ticket.customerId(), ticket.body());
         }
+    }
+
+    private static boolean isDenied(Throwable failure) {
+        for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
+            if (cause instanceof org.apache.kafka.common.errors.AuthorizationException) {
+                return true;
+            }
+            if (cause.getCause() == cause) {
+                break;
+            }
+        }
+        return false;
     }
 
     private TicketCreated readTicket(String payload) throws JsonProcessingException {

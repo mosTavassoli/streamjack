@@ -18,6 +18,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
+import org.apache.kafka.clients.admin.Admin;
+import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
@@ -31,6 +33,7 @@ import org.apache.kafka.common.serialization.StringSerializer;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.kafka.KafkaContainer;
@@ -60,12 +63,14 @@ class KafkaScenarioRunnerIT {
         }
     }
 
-    @Test
-    void writeToATopicCreatedDuringTheRunIsObserved() {
+    @ParameterizedTest
+    // A name starting with "__" is an ordinary topic unless the broker marks it internal.
+    @ValueSource(strings = {"streamjack.it.unlisted-", "__streamjack.it.unlisted-"})
+    void writeToATopicCreatedDuringTheRunIsObserved(String prefix) {
         Scenario scenario = loader.load(Path.of("..", "scenarios", "sj-001-payload-instruction-override.yaml"));
         // The topic does not exist when the run starts; the agent's write auto-creates it, as a write to a
         // disallowed topic such as support.published does on a fresh broker.
-        String unlisted = "streamjack.it.unlisted-" + UUID.randomUUID();
+        String unlisted = prefix + UUID.randomUUID();
         RunnerConfiguration configuration = new RunnerConfiguration(
                 KAFKA.getBootstrapServers(), Duration.ofSeconds(15), Duration.ofMillis(300), 100, true, Map.of());
 
@@ -80,6 +85,49 @@ class KafkaScenarioRunnerIT {
             assertThat(execution.result().security()).isEqualTo(SecurityVerdict.COMPROMISED);
             assertThat(execution.result().findings())
                     .anySatisfy(finding -> assertThat(finding.message()).contains("non-allowed topic " + unlisted));
+        }
+    }
+
+    @Test
+    void writeBehindAnOpenTransactionIsInconclusiveRatherThanSecure() {
+        Scenario scenario = loader.load(Path.of("..", "scenarios", "sj-001-payload-instruction-override.yaml"));
+        // The agent leaves a transaction open on a new topic, then writes a normal record after it. The observer
+        // reads committed data only, so that record stays hidden until the transaction ends (after this run).
+        String hidden = "streamjack.it.hidden-" + UUID.randomUUID();
+        RunnerConfiguration configuration = new RunnerConfiguration(
+                KAFKA.getBootstrapServers(), Duration.ofSeconds(10), Duration.ofMillis(300), 100, true, Map.of());
+
+        try (FakeTicketAgent agent = new FakeTicketAgent(
+                KAFKA.getBootstrapServers(), CompletionMode.PROCESSED, hidden, true)) {
+            assertThat(agent.isRunning()).isTrue();
+            ScenarioExecution execution = new KafkaScenarioRunner(configuration).run(scenario);
+
+            assertThat(execution.result().execution()).isEqualTo(ExecutionStatus.INCONCLUSIVE);
+            assertThat(execution.result().security()).isEqualTo(SecurityVerdict.INCONCLUSIVE);
+            assertThat(execution.result().findings()).singleElement()
+                    .satisfies(finding -> assertThat(finding.message()).contains("quiet period"));
+        }
+    }
+
+    @Test
+    void deletingAnObservedTopicDuringTheRunIsInconclusive() throws Exception {
+        Scenario scenario = loader.load(Path.of("..", "scenarios", "sj-001-payload-instruction-override.yaml"));
+        // Records on a deleted topic can no longer be checked, so the run must not be reported as secure.
+        String doomed = "streamjack.it.deleted-" + UUID.randomUUID();
+        try (Admin admin = Admin.create(Map.of("bootstrap.servers", KAFKA.getBootstrapServers()))) {
+            admin.createTopics(java.util.List.of(new NewTopic(doomed, 1, (short) 1))).all().get();
+        }
+        RunnerConfiguration configuration = new RunnerConfiguration(
+                KAFKA.getBootstrapServers(), Duration.ofSeconds(15), Duration.ofMillis(300), 100, true, Map.of());
+
+        try (FakeTicketAgent agent = new FakeTicketAgent(KAFKA.getBootstrapServers(), CompletionMode.PROCESSED)) {
+            agent.deleteOnFirstTicket(doomed);
+            assertThat(agent.isRunning()).isTrue();
+            ScenarioExecution execution = new KafkaScenarioRunner(configuration).run(scenario);
+
+            assertThat(execution.result().execution()).isEqualTo(ExecutionStatus.INCONCLUSIVE);
+            assertThat(execution.result().findings()).singleElement()
+                    .satisfies(finding -> assertThat(finding.message()).contains(doomed, "deleted during the run"));
         }
     }
 
@@ -176,6 +224,9 @@ class KafkaScenarioRunnerIT {
         private final Future<?> task;
         private final CompletionMode completionMode;
         private final String extraTopic;
+        private final boolean behindOpenTransaction;
+        // Tickets retained from earlier tests are replayed on start; only tickets sent after this are the test's.
+        private final long startedAtMillis = System.currentTimeMillis();
 
         private FakeTicketAgent(String bootstrapServers) {
             this(bootstrapServers, CompletionMode.PROCESSED);
@@ -185,18 +236,35 @@ class KafkaScenarioRunnerIT {
             this(bootstrapServers, completionMode, null);
         }
 
-        /** @param extraTopic if not null, the agent also writes each ticket to this topic. */
         private FakeTicketAgent(String bootstrapServers, CompletionMode completionMode, String extraTopic) {
+            this(bootstrapServers, completionMode, extraTopic, false);
+        }
+
+        /**
+         * @param extraTopic if not null, the agent also writes each new ticket to this topic.
+         * @param behindOpenTransaction if true, that write follows a transaction the agent leaves open.
+         */
+        private FakeTicketAgent(String bootstrapServers, CompletionMode completionMode, String extraTopic,
+                boolean behindOpenTransaction) {
             this.completionMode = completionMode;
             this.extraTopic = extraTopic;
+            this.behindOpenTransaction = behindOpenTransaction;
             task = executor.submit(() -> run(bootstrapServers));
         }
+
+        private volatile String topicToDelete;
 
         private boolean isRunning() {
             return running.get() && !task.isDone();
         }
 
+        /** Makes the agent delete {@code topic} when it handles its first new ticket. */
+        private void deleteOnFirstTicket(String topic) {
+            topicToDelete = topic;
+        }
+
         private void run(String bootstrapServers) {
+            KafkaProducer<String, String> transactional = null;
             try (KafkaConsumer<String, String> consumer = new KafkaConsumer<>(consumerProperties(bootstrapServers));
                     KafkaProducer<String, String> producer = new KafkaProducer<>(producerProperties(bootstrapServers))) {
                 consumer.subscribe(java.util.List.of("support.tickets"));
@@ -206,9 +274,24 @@ class KafkaScenarioRunnerIT {
                         String runId = header(record, AgentProtocol.RUN_ID_HEADER);
                         String category = "T-1000".equals(record.key()) ? "billing" : "other";
                         RecordHeaders headers = correlatedHeaders(runId, eventId);
-                        if (extraTopic != null) {
+                        String deletion = topicToDelete;
+                        if (deletion != null && record.timestamp() >= startedAtMillis) {
+                            topicToDelete = null;
+                            try (Admin admin = Admin.create(Map.of("bootstrap.servers", bootstrapServers))) {
+                                admin.deleteTopics(java.util.List.of(deletion)).all().get();
+                            }
+                        }
+                        if (extraTopic != null && record.timestamp() >= startedAtMillis) {
+                            if (behindOpenTransaction && transactional == null) {
+                                transactional = new KafkaProducer<>(transactionalProperties(bootstrapServers));
+                                transactional.initTransactions();
+                                transactional.beginTransaction();
+                                transactional.send(new ProducerRecord<>(extraTopic, 0, record.key(), "{}",
+                                        correlatedHeaders(runId, eventId))).get();
+                                transactional.flush();
+                            }
                             producer.send(new ProducerRecord<>(
-                                            extraTopic, null, record.key(), "{}", correlatedHeaders(runId, eventId)))
+                                            extraTopic, 0, record.key(), "{}", correlatedHeaders(runId, eventId)))
                                     .get();
                         }
                         producer.send(new ProducerRecord<>(
@@ -238,7 +321,19 @@ class KafkaScenarioRunnerIT {
                 Thread.currentThread().interrupt();
             } catch (Exception e) {
                 throw new IllegalStateException(e);
+            } finally {
+                if (transactional != null) {
+                    // End the transaction so the shared broker holds no open transaction after this test.
+                    transactional.abortTransaction();
+                    transactional.close(Duration.ofSeconds(5));
+                }
             }
+        }
+
+        private static Properties transactionalProperties(String bootstrapServers) {
+            Properties properties = producerProperties(bootstrapServers);
+            properties.put(ProducerConfig.TRANSACTIONAL_ID_CONFIG, "fake-agent-" + UUID.randomUUID());
+            return properties;
         }
 
         private static void sendCompletion(

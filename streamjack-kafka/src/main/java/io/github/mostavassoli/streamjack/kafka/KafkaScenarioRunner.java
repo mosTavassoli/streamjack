@@ -25,7 +25,6 @@ import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.regex.Pattern;
 import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.admin.AdminClientConfig;
 import org.apache.kafka.clients.admin.NewTopic;
@@ -36,7 +35,6 @@ import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
-import org.apache.kafka.common.PartitionInfo;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.header.Header;
 import org.apache.kafka.common.header.Headers;
@@ -47,7 +45,6 @@ import org.apache.kafka.common.serialization.StringSerializer;
 
 public final class KafkaScenarioRunner {
 
-    private static final Pattern ALL_NON_INTERNAL_TOPICS = Pattern.compile("^(?!__).+");
     private static final Duration ASSIGNMENT_TIMEOUT = Duration.ofSeconds(10);
     private static final Duration POLL_INTERVAL = Duration.ofMillis(200);
     private static final Duration PARTITION_REFRESH_INTERVAL = Duration.ofMillis(500);
@@ -82,12 +79,15 @@ public final class KafkaScenarioRunner {
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
 
         boolean quietPeriodCompleted;
-        try (KafkaConsumer<String, String> consumer = new KafkaConsumer<>(consumerProperties());
+        try (AdminClient admin = AdminClient.create(adminProperties());
+                KafkaConsumer<String, String> consumer = new KafkaConsumer<>(consumerProperties());
                 KafkaProducer<String, String> producer = new KafkaProducer<>(producerProperties())) {
-            assignAllAndSeekToEnd(consumer);
+            ObservedPartitions partitions = new ObservedPartitions(admin, consumer);
+            assignAllFromEnd(partitions);
             produceScenario(producer, scenario, runId);
             quietPeriodCompleted = collectEvidence(
                     consumer,
+                    partitions,
                     runId,
                     expectedEvents,
                     terminalEvents,
@@ -146,57 +146,24 @@ public final class KafkaScenarioRunner {
         }
     }
 
-    /**
-     * Observes every existing non-internal partition from its current end. Partitions are assigned directly rather
-     * than through a consumer group: a group rebalance would reset partitions without committed offsets to the
-     * earliest offset, so old records would be read again as if they were new.
-     */
-    private void assignAllAndSeekToEnd(KafkaConsumer<String, String> consumer) {
-        Set<TopicPartition> partitions = observablePartitions(consumer, min(configuration.observationTimeout(), ASSIGNMENT_TIMEOUT));
-        if (partitions.isEmpty()) {
-            throw new KafkaRunnerException("Kafka observer found no topics to observe");
-        }
-        consumer.assign(partitions);
-        consumer.seekToEnd(partitions);
-        partitions.forEach(consumer::position);
-    }
-
-    /**
-     * Starts observing partitions that appeared after observation started (for example, a topic the agent
-     * auto-created by writing to a disallowed topic) from their beginning. Returns whether any were added.
-     */
-    private static boolean observeNewPartitions(KafkaConsumer<String, String> consumer, Duration remaining) {
-        Set<TopicPartition> added = observablePartitions(consumer, remaining);
-        added.removeAll(consumer.assignment());
-        if (added.isEmpty()) {
-            return false;
-        }
-        Set<TopicPartition> all = new HashSet<>(consumer.assignment());
-        all.addAll(added);
-        consumer.assign(all);
-        consumer.seekToBeginning(added);
-        return true;
-    }
-
-    /** Whether every observed partition has been read up to its current end (last stable offset). */
-    private static boolean caughtUp(KafkaConsumer<String, String> consumer, Duration timeout) {
-        Map<TopicPartition, Long> ends = consumer.endOffsets(consumer.assignment(), timeout);
-        for (Map.Entry<TopicPartition, Long> end : ends.entrySet()) {
-            if (consumer.position(end.getKey(), timeout) < end.getValue()) {
-                return false;
+    private void assignAllFromEnd(ObservedPartitions partitions) {
+        long deadline = System.nanoTime() + min(configuration.observationTimeout(), ASSIGNMENT_TIMEOUT).toNanos();
+        while (true) {
+            try {
+                partitions.assignAllFromEnd(Duration.ofNanos(Math.max(0, deadline - System.nanoTime())));
+                return;
+            } catch (ObservedPartitions.Unconfirmed e) {
+                if (System.nanoTime() >= deadline) {
+                    throw new KafkaRunnerException("Kafka observer could not read topic metadata", e.getCause());
+                }
+                try {
+                    Thread.sleep(POLL_INTERVAL.toMillis());
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    throw new KafkaRunnerException("Interrupted while reading topic metadata", interrupted);
+                }
             }
         }
-        return true;
-    }
-
-    private static Set<TopicPartition> observablePartitions(KafkaConsumer<String, String> consumer, Duration timeout) {
-        Set<TopicPartition> partitions = new HashSet<>();
-        for (Map.Entry<String, List<PartitionInfo>> topic : consumer.listTopics(timeout).entrySet()) {
-            if (ALL_NON_INTERNAL_TOPICS.matcher(topic.getKey()).matches()) {
-                topic.getValue().forEach(info -> partitions.add(new TopicPartition(info.topic(), info.partition())));
-            }
-        }
-        return partitions;
     }
 
     private void produceScenario(KafkaProducer<String, String> producer, Scenario scenario, String runId) {
@@ -220,8 +187,19 @@ public final class KafkaScenarioRunner {
         producer.flush();
     }
 
+    /**
+     * Collects correlated records until every input has completed, a full quiet period has passed, and everything
+     * written up to that point has been read; or until the observation timeout.
+     *
+     * <p>When the quiet period ends, the observer takes a snapshot: it adds partitions created during the run (for
+     * example, a disallowed topic the agent auto-created by writing to it) and records the end of every partition
+     * written to during the run, including records behind open transactions. The run ends once the observer has read up to that
+     * snapshot. Correlated activity or a new partition discards the snapshot and restarts the wait. Unrelated
+     * traffic after the snapshot does not delay the end. A partition created after the snapshot is outside it.
+     */
     private boolean collectEvidence(
             KafkaConsumer<String, String> consumer,
+            ObservedPartitions partitions,
             String runId,
             Set<String> expectedEvents,
             Set<String> terminalEvents,
@@ -231,6 +209,7 @@ public final class KafkaScenarioRunner {
         long started = System.nanoTime();
         Duration timeout = configuration.observationTimeout();
         Duration quietUntil = null;
+        Map<TopicPartition, Long> drainTarget = null;
         Duration nextPartitionRefresh = PARTITION_REFRESH_INTERVAL;
         int evidenceRecords = 0;
 
@@ -239,37 +218,48 @@ public final class KafkaScenarioRunner {
             if (elapsed.compareTo(timeout) >= 0) {
                 return false;
             }
-            Duration remaining = timeout.minus(elapsed);
-            if (quietUntil != null && quietUntil.compareTo(timeout) <= 0 && elapsed.compareTo(quietUntil) >= 0) {
-                // Before ending, make sure nothing written is unread: a topic that did not exist when observation
-                // started (for example, one the agent auto-created by writing to a disallowed topic) or records
-                // not yet fetched. Otherwise that evidence would be silently dropped. Keep observing instead; the
-                // observation timeout still bounds the run.
-                boolean drained;
-                try {
-                    drained = !observeNewPartitions(consumer, remaining) && caughtUp(consumer, remaining);
-                } catch (org.apache.kafka.common.errors.TimeoutException e) {
-                    // Not confirmed in the time left; the observation timeout makes the run inconclusive.
-                    drained = false;
+            try {
+                if (elapsed.compareTo(nextPartitionRefresh) >= 0) {
+                    // Topics created just before observation started (including the audit topic) may be missing
+                    // from the first listing, and agents can create topics at any time.
+                    if (partitions.addNewFromBeginning(remaining(started, timeout))) {
+                        drainTarget = null;
+                        quietUntil = restartedQuiet(quietUntil, started);
+                    }
+                    nextPartitionRefresh = Duration.ofNanos(System.nanoTime() - started).plus(PARTITION_REFRESH_INTERVAL);
                 }
-                if (drained) {
-                    return true;
+                if (quietUntil != null && quietUntil.compareTo(timeout) <= 0 && elapsed.compareTo(quietUntil) >= 0) {
+                    if (drainTarget == null) {
+                        if (partitions.addNewFromBeginning(remaining(started, timeout))) {
+                            quietUntil = restartedQuiet(quietUntil, started);
+                        } else {
+                            drainTarget = partitions.drainTargets(remaining(started, timeout));
+                        }
+                    }
+                    if (drainTarget != null && partitions.reached(drainTarget, remaining(started, timeout))) {
+                        return true;
+                    }
                 }
-                quietUntil = elapsed.plus(configuration.quietPeriod());
-                continue;
+            } catch (ObservedPartitions.Unconfirmed e) {
+                // Not confirmed yet; retried after the next poll. The observation timeout bounds the run, and an
+                // unconfirmed run is inconclusive rather than secure.
+            } catch (ObservedPartitions.CoverageLost e) {
+                protocolProblems.add(e.getMessage());
+                return false;
             }
-            if (elapsed.compareTo(nextPartitionRefresh) >= 0) {
-                // Topics created just before observation started (including the audit topic) may be missing
-                // from the first listing, and agents can create topics at any time.
-                try {
-                    observeNewPartitions(consumer, remaining);
-                } catch (org.apache.kafka.common.errors.TimeoutException e) {
-                    // Retried at the next refresh; the final drain check still guards the result.
-                }
-                nextPartitionRefresh = elapsed.plus(PARTITION_REFRESH_INTERVAL);
+            // Always poll after a check, so reading can progress toward the snapshot even with a zero quiet period.
+            Duration left = remaining(started, timeout);
+            Duration untilQuiet = quietUntil == null || quietUntil.compareTo(elapsed) <= 0
+                    ? left
+                    : min(left, quietUntil.minus(elapsed));
+            ConsumerRecords<String, String> records;
+            try {
+                records = consumer.poll(min(POLL_INTERVAL, untilQuiet));
+            } catch (org.apache.kafka.common.errors.TopicAuthorizationException e) {
+                // The observer can see the topic but not read it, so its records cannot be checked.
+                protocolProblems.add("Observer is not authorized to read topic(s) " + e.unauthorizedTopics());
+                return false;
             }
-            Duration nextBoundary = quietUntil == null ? timeout : min(quietUntil, timeout);
-            ConsumerRecords<String, String> records = consumer.poll(min(POLL_INTERVAL, nextBoundary.minus(elapsed)));
             boolean matchingActivity = false;
             for (ConsumerRecord<String, String> record : records) {
                 if (!hasHeaderValue(record.headers(), AgentProtocol.RUN_ID_HEADER, runId)) {
@@ -301,8 +291,21 @@ public final class KafkaScenarioRunner {
 
             if (terminalEvents.containsAll(expectedEvents) && (matchingActivity || quietUntil == null)) {
                 quietUntil = Duration.ofNanos(System.nanoTime() - started).plus(configuration.quietPeriod());
+                drainTarget = null;
             }
         }
+    }
+
+    /** A newly observed partition restarts a running quiet period; before all completions there is none yet. */
+    private Duration restartedQuiet(Duration quietUntil, long started) {
+        return quietUntil == null
+                ? null
+                : Duration.ofNanos(System.nanoTime() - started).plus(configuration.quietPeriod());
+    }
+
+    private static Duration remaining(long started, Duration timeout) {
+        Duration left = timeout.minus(Duration.ofNanos(System.nanoTime() - started));
+        return left.isNegative() ? Duration.ZERO : left;
     }
 
     private void collectAudit(
@@ -354,6 +357,12 @@ public final class KafkaScenarioRunner {
         Properties properties = new Properties();
         configuration.kafkaProperties().forEach(properties::put);
         properties.put(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, configuration.bootstrapServers());
+        return properties;
+    }
+
+    private Properties adminProperties() {
+        Properties properties = baseProperties();
+        properties.put(AdminClientConfig.CLIENT_ID_CONFIG, "streamjack-observer-admin");
         return properties;
     }
 
