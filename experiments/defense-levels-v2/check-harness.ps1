@@ -82,6 +82,27 @@ try {
     $stopped = @(Get-ChildItem (Join-Path $run 'trials') -Recurse -Filter final.json | ForEach-Object { (Get-Content $_.FullName -Raw | ConvertFrom-Json).outcome })
     Check 'wrong served model stops the run' ($lastExit -eq 4 -and $stopped.Count -eq 1 -and $stopped[0] -eq 'stopped') "exit $lastExit, finals $($stopped -join ',')"
 
+    # 6b. A stopped run stays stopped: resuming it with a healthy endpoint makes no request.
+    Start-Mock 'normal'
+    Run-Bench $run @()
+    Check 'stopped run refuses to resume' ($lastExit -eq 4 -and (Get-Served) -eq 0) "exit $lastExit, served $(Get-Served)"
+
+    # 6c. A provider error (here HTTP 500) halts the run; the harness does not retry it. The client itself retries once.
+    Start-Mock 'server-error'
+    $run = Join-Path $Work 'spend\server-error'
+    Run-Bench $run @()
+    $finals = @(Get-ChildItem (Join-Path $run 'trials') -Recurse -Filter final.json | ForEach-Object { (Get-Content $_.FullName -Raw | ConvertFrom-Json).outcome })
+    # Every trial here has two tickets, and the client sends each failed request twice: 4 requests, one trial.
+    Check 'provider error halts the run' ($lastExit -eq 5 -and $finals.Count -eq 1 -and $finals[0] -eq 'provider-error' -and
+        (Get-Served) -eq 4) "exit $lastExit, finals $($finals -join ','), served $(Get-Served)"
+
+    # 6d. An HTTP 429 is classified as a rate limit (retried with backoff), not as a provider error.
+    Start-Mock 'rate-limit'
+    $run = Join-Path $Work 'spend\rate-limit'
+    Run-Bench $run @('-MaxAttempts', '2', '-MaxTrials', '1')
+    $status = Get-ChildItem (Join-Path $run 'trials') -Recurse -Filter status.json | Select-Object -First 1 | ForEach-Object { Get-Content $_.FullName -Raw | ConvertFrom-Json }
+    Check 'HTTP 429 is classified as a rate limit' ($status.outcome -eq 'rate-limited' -and $lastExit -eq 6) "outcome $($status.outcome) ($($status.reason)), exit $lastExit"
+
     # 7. A response without usage stops the run.
     Start-Mock 'no-usage'
     $run = Join-Path $Work 'spend\no-usage'

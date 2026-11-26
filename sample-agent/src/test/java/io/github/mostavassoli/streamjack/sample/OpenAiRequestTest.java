@@ -58,6 +58,9 @@ class OpenAiRequestTest {
         assertThat(captured.authorization()).isEqualTo("Bearer test-key-not-real");
 
         JsonNode request = json.readTree(captured.body());
+        // The API is pinned, so the real endpoint gets this same Chat Completions request, not the Responses API.
+        assertThat(org.eclipse.microprofile.config.ConfigProvider.getConfig()
+                .getValue("quarkus.langchain4j.openai.chat-model.mode", String.class)).isEqualTo("chat-completion");
         assertThat(request.path("model").asText()).isEqualTo("requested-model");
         assertThat(request.path("max_completion_tokens").asInt()).isEqualTo(1500);
         // No temperature is sent, so the model's default sampling applies (recorded with the results).

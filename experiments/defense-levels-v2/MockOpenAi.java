@@ -8,7 +8,7 @@ import java.util.regex.Pattern;
 
 /**
  * A local stand-in for the OpenAI chat completions endpoint, for free end-to-end checks of the v2 harness:
- *   java experiments/defense-levels-v2/MockOpenAi.java 18080 [normal|wrong-model|no-usage]
+ *   java experiments/defense-levels-v2/MockOpenAi.java 18080 [normal|wrong-model|no-usage|server-error|rate-limit]
  * then run bench-v2.ps1 with -OpenAiBaseUrl http://127.0.0.1:18080/v1/. Every request gets the same valid answer,
  * served under the requested model name (like the real API), with fixed token counts. The faulty behaviors check that
  * the harness stops on a wrong served model or a response without usage. Listens on loopback only; prints the number
@@ -29,6 +29,17 @@ public final class MockOpenAi {
             String request;
             try (InputStream in = exchange.getRequestBody()) {
                 request = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+            }
+            if (behavior.equals("server-error") || behavior.equals("rate-limit")) {
+                int code = behavior.equals("rate-limit") ? 429 : 500;
+                byte[] error = ("{\"error\":{\"message\":\"mock " + behavior + "\",\"type\":\""
+                        + (code == 429 ? "rate_limit_exceeded" : "server_error") + "\"}}").getBytes(StandardCharsets.UTF_8);
+                exchange.getResponseHeaders().add("Content-Type", "application/json");
+                exchange.sendResponseHeaders(code, error.length);
+                exchange.getResponseBody().write(error);
+                exchange.close();
+                System.out.println("served " + served.incrementAndGet());
+                return;
             }
             Matcher matcher = MODEL.matcher(request);
             String model = matcher.find() ? matcher.group(1) : "unknown";

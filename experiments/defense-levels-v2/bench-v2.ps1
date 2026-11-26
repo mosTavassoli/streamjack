@@ -24,8 +24,9 @@ param(
     [Parameter(Mandatory)][double]$OutputPrice,
     # Total spend allowed across every run directory under the parent of -Out (pilots and retries included).
     [Parameter(Mandatory)][double]$CostLimit,
-    # Worst-case cost of one trial; used before each trial and for attempts whose cost is unclear.
-    [double]$TrialCostReserve = 0.05,
+    # Worst-case cost of one trial; used before each trial and for attempts whose cost is unclear. The default covers
+    # gpt-6.2-sol: up to 3 tickets x 2 client dispatches x (about 2,000 input + 1,500 output tokens) is about $0.11.
+    [double]$TrialCostReserve = 0.12,
     [int]$MaxAttempts = 3,
     # Stop after this many trials in this invocation (0 = no limit); use 1 for the first paid trial.
     [int]$MaxTrials = 0,
@@ -49,6 +50,12 @@ $savedEnvironment = @{}
 foreach ($name in 'OPENAI_API_KEY', 'OPENAI_BASE_URL', 'OPENAI_MODEL', 'KAFKA_BOOTSTRAP_SERVERS', 'STREAMJACK_AGENT_MODEL',
         'STREAMJACK_AGENT_SECURITY_MODE', 'STREAMJACK_USAGE_LOG') {
     $savedEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
+}
+# Runtime overrides would change the experiment without changing the fingerprinted build (for example the output
+# cap or any Quarkus setting), so the agent starts without them. They are restored when the script ends.
+foreach ($variable in Get-ChildItem Env: | Where-Object { $_.Name -match '^(QUARKUS_|MP_|SMALLRYE_|STREAMJACK_LLM_PROVIDER$|OPENAI_MAX_COMPLETION_TOKENS$)' }) {
+    $savedEnvironment[$variable.Name] = $variable.Value
+    Remove-Item "Env:$($variable.Name)"
 }
 if ($OpenAiBaseUrl) {
     if ($OpenAiBaseUrl -notmatch '^http://127\.0\.0\.1:\d+/') { throw '-OpenAiBaseUrl is only for a local mock on 127.0.0.1.' }
@@ -80,9 +87,16 @@ $spendRoot = Split-Path $Out -Parent
 
 function Write-Json($object, $path) {
     # Write to a temporary file, then rename, so a crash never leaves a half-written status.
+    # State files must never fail silently: a lost status could let a billed attempt be repeated.
     $temporary = "$path.tmp"
-    $object | ConvertTo-Json -Depth 6 | Set-Content -Path $temporary -Encoding ASCII
-    Move-Item -Path $temporary -Destination $path -Force
+    $object | ConvertTo-Json -Depth 6 | Set-Content -Path $temporary -Encoding ASCII -ErrorAction Stop
+    Move-Item -Path $temporary -Destination $path -Force -ErrorAction Stop
+}
+function Read-Outcome($path) {
+    # A state file that exists but cannot be read, or has no outcome, stops the run instead of being skipped.
+    $state = Get-Content $path -Raw -ErrorAction Stop | ConvertFrom-Json
+    if (!$state -or !$state.outcome) { throw "Unreadable state file: $path" }
+    return $state
 }
 function Get-Fingerprint([string[]]$paths) {
     $hashes = foreach ($path in $paths) { (Get-FileHash $path -Algorithm SHA256).Hash }
@@ -149,15 +163,21 @@ function Get-Spend {
         foreach ($attempt in Get-ChildItem $trialsDir -Recurse -Directory -Filter 'attempt-*') {
             $status = Get-Content (Join-Path $attempt.FullName 'status.json') -Raw -ErrorAction SilentlyContinue | ConvertFrom-Json
             $lines = @(Get-Content (Join-Path $attempt.FullName 'usage.jsonl') -ErrorAction SilentlyContinue)
-            $unclear = !$status -or $status.outcome -in 'unknown', 'provider-error', 'rate-limited'
+            $unclear = !$status -or $status.outcome -in 'unknown', 'provider-error', 'rate-limited', 'failed'
+            $priced = 0
             foreach ($line in $lines) {
                 $entry = $line | ConvertFrom-Json
                 if ($entry.outcome -eq 'response' -and $null -ne $entry.inputTokens -and $null -ne $entry.outputTokens) {
+                    # Completion tokens include reasoning tokens; prompt tokens include cached ones, priced at the
+                    # full input price, which overstates cost when the provider applies a cache discount.
                     $total += ([double]$entry.inputTokens * $runSettings.inputPrice + [double]$entry.outputTokens * $runSettings.outputPrice) / 1e6
+                    $priced++
                 } else {
                     $unclear = $true
                 }
             }
+            # Fewer logged responses than tickets means a call the log does not account for.
+            if ($status -and ($null -eq $status.events -or $priced -lt [int]$status.events)) { $unclear = $true }
             # A crashed, failed, or incompletely logged attempt may have been billed for calls the log does not show.
             if ($unclear) { $total += $reserve }
         }
@@ -205,7 +225,7 @@ function Get-Usage($attemptDir) {
 
 function Invoke-Attempt($trial, $attemptDir) {
     $broker = $null; $agent = $null; $runnerStarted = $false
-    $status = [ordered]@{ outcome = 'unknown'; reason = ''; started = (Get-Date).ToString('o') }
+    $status = [ordered]@{ outcome = 'unknown'; reason = ''; events = [int]$trial.events; started = (Get-Date).ToString('o') }
     try {
         $broker = Start-Broker
         $env:KAFKA_BOOTSTRAP_SERVERS = '127.0.0.1:9092'
@@ -227,21 +247,25 @@ function Invoke-Attempt($trial, $attemptDir) {
             --evidence-dir "$attemptDir\evidence" *> "$attemptDir\runner.log"
         $usage = Get-Usage $attemptDir
         $errors = @($usage | Where-Object outcome -eq 'error')
+        $responses = @($usage | Where-Object outcome -eq 'response')
+        # From here on a request may have been sent, so nothing below is retried except an explicit rate limit
+        # that produced no paid response at all.
         if (!(Test-Path "$attemptDir\report.json")) { $status.reason = 'runner wrote no report'; return $status }
         $result = (Get-Content "$attemptDir\report.json" -Raw | ConvertFrom-Json).results[0]
         $evidence = @(Get-ChildItem "$attemptDir\evidence" -Filter '*.json' -ErrorAction SilentlyContinue)
         # Only the runner's fixed text and the agent's validated error code are used, never free agent text.
         $messages = ($result.findings | ForEach-Object message) -join ' '
-        if ($result.execution -eq 'COMPLETED' -and $evidence.Count -eq 1) {
+        if ($result.execution -eq 'COMPLETED' -and $evidence.Count -eq 1 -and !$errors) {
             $status.outcome = 'completed'
-        } elseif ($errors | Where-Object { $_.error -match 'RateLimit' }) {
+        } elseif ($errors -and $responses.Count -eq 0 -and !($errors | Where-Object { $_.error -notmatch 'RateLimit' })) {
             $status.outcome = 'rate-limited'; $status.reason = 'provider rate limit'
         } elseif ($errors) {
+            # Authentication, model access, an unsupported request, or a server error: stop and inspect.
             $status.outcome = 'provider-error'; $status.reason = (($errors | ForEach-Object error | Sort-Object -Unique) -join ' ')
         } elseif ($messages -match 'with MODEL_OUTPUT_INVALID') {
             $status.outcome = 'model-output-invalid'; $status.reason = 'agent rejected the model output'
         } elseif ($usage.Count -eq 0) {
-            $status.outcome = 'setup-failed'; $status.reason = "execution $($result.execution) without a model call"
+            $status.reason = "execution $($result.execution) and no model call was logged"
         } else {
             $status.outcome = 'failed'; $status.reason = "execution $($result.execution)"
         }
@@ -265,8 +289,10 @@ function Invoke-Attempt($trial, $attemptDir) {
 # model, means results and spend can no longer be trusted.
 function Test-Usage($trial, $attemptDir, $status) {
     $responses = @(Get-Usage $attemptDir | Where-Object outcome -eq 'response')
+    # The exact alias, or the alias plus a dated snapshot suffix (for example gpt-6-luna-2026-10-01).
+    $servedPattern = '^' + [regex]::Escape($Model) + '(-\d{4}-\d{2}-\d{2})?$'
     foreach ($response in $responses) {
-        if (!"$($response.model)".StartsWith($Model)) { return "served model '$($response.model)' is not '$Model'" }
+        if ("$($response.model)" -notmatch $servedPattern) { return "served model '$($response.model)' is not '$Model'" }
         if ($null -eq $response.inputTokens -or $null -eq $response.outputTokens) { return 'a response has no token counts' }
     }
     if ($status.outcome -eq 'completed' -and $responses.Count -ne [int]$trial.events) {
@@ -277,26 +303,49 @@ function Test-Usage($trial, $attemptDir, $status) {
 
 # --- Main loop ------------------------------------------------------------------------------------------------------------
 $retryable = 'setup-failed', 'rate-limited'
-$exitCode = 0; $ranThisInvocation = 0
+# Outcomes that halt the run for a human to inspect: the setup, the key, or the request is wrong, so continuing
+# would only spend money on more of the same.
+$halting = 'stopped', 'provider-error'
+$exitCode = 0; $ranThisInvocation = 0; $unsuccessful = 0
 try {
-    :trials foreach ($trial in $manifest) {
+    # A halted run stays halted until a human has inspected it and removed the halting final.json.
+    foreach ($existing in Get-ChildItem (Join-Path $Out 'trials') -Recurse -Filter 'final.json' -ErrorAction SilentlyContinue) {
+        $state = Read-Outcome $existing.FullName
+        if ($state.outcome -in $halting) {
+            "Refusing to continue: $($existing.Directory.Name) ended as '$($state.outcome)' ($($state.reason))."
+            "Inspect it, fix the cause, and delete $($existing.FullName) to resume."
+            $exitCode = 4
+            break
+        }
+    }
+    # The manifest is skipped entirely when the run is halted (an empty list, not a return, so the exit code holds).
+    $pending = if ($exitCode -eq 0) { $manifest } else { @() }
+    :trials foreach ($trial in $pending) {
         $trialDir = Join-Path $Out "trials\$($trial.trial)"
-        if (Test-Path "$trialDir\final.json") { continue }
+        if (Test-Path "$trialDir\final.json") { [void](Read-Outcome "$trialDir\final.json"); continue }
         New-Item -ItemType Directory -Force -Path $trialDir | Out-Null
         # Rebuild the trial state from what earlier invocations recorded. An attempt without a status crashed while
         # running: it may have been billed, so it is final as 'unknown'.
         $attempts = @(Get-ChildItem $trialDir -Directory -Filter 'attempt-*' | Sort-Object Name)
-        $last = $null
+        $last = $null; $lastDir = $null
         foreach ($previous in $attempts) {
             $statusFile = "$($previous.FullName)\status.json"
-            if (!(Test-Path $statusFile)) { Write-Json ([ordered]@{ outcome = 'unknown'; reason = 'interrupted' }) $statusFile }
-            $last = Get-Content $statusFile -Raw | ConvertFrom-Json
+            if (!(Test-Path $statusFile)) {
+                Write-Json ([ordered]@{ outcome = 'unknown'; reason = 'interrupted'; events = [int]$trial.events }) $statusFile
+            }
+            $last = Read-Outcome $statusFile; $lastDir = $previous
             if ($last.outcome -eq 'completed') { break }
         }
         $final = $null
         if ($last -and $last.outcome -notin $retryable) {
-            $final = [ordered]@{ outcome = $last.outcome; attempt = $attempts.Count }
-            if ($last.outcome -eq 'completed') { $final.attempt = [int]($previous.Name -replace 'attempt-', '') }
+            # A recovered attempt gets the same usage check as a fresh one before its result is accepted.
+            $problem = Test-Usage $trial $lastDir.FullName $last
+            if ($problem) {
+                Write-Json ([ordered]@{ outcome = 'stopped'; attempt = $attempts.Count; reason = $problem }) "$trialDir\final.json"
+                "Stopping the run: $problem. Inspect $($lastDir.FullName)."
+                $exitCode = 4; break trials
+            }
+            $final = [ordered]@{ outcome = $last.outcome; attempt = [int]($lastDir.Name -replace 'attempt-', '') }
         }
         if (!$final -and $MaxTrials -gt 0 -and $ranThisInvocation -ge $MaxTrials) {
             "Stopping after $MaxTrials trial(s) as requested. Rerun the same command to continue."
@@ -322,12 +371,19 @@ try {
                 $exitCode = 4; break trials
             }
             $last = [pscustomobject]$status
-            if ($status.outcome -notin $retryable) { $final = [ordered]@{ outcome = $status.outcome; attempt = $n } }
+            if ($status.outcome -notin $retryable) { $final = [ordered]@{ outcome = $status.outcome; attempt = $n; reason = $status.reason } }
         }
-        if (!$final) { $final = [ordered]@{ outcome = $last.outcome; attempt = $MaxAttempts } }
+        if (!$final) { $final = [ordered]@{ outcome = $last.outcome; attempt = $MaxAttempts; reason = $last.reason } }
         Write-Json $final "$trialDir\final.json"
         $ranThisInvocation++
+        if ($final.outcome -ne 'completed') { $unsuccessful++ }
+        if ($final.outcome -in $halting) {
+            "Stopping the run: $($trial.trial) ended as '$($final.outcome)' ($($final.reason)). Inspect it before resuming."
+            $exitCode = 5; break trials
+        }
     }
+    # Exit 0 only if every trial this invocation ran completed, so a smoke test cannot pass on a failure.
+    if ($exitCode -eq 0 -and $unsuccessful -gt 0) { $exitCode = 6 }
 } finally {
     foreach ($name in $savedEnvironment.Keys) { [Environment]::SetEnvironmentVariable($name, $savedEnvironment[$name], 'Process') }
     $finals = @(Get-ChildItem (Join-Path $Out 'trials') -Recurse -Filter 'final.json' -ErrorAction SilentlyContinue |

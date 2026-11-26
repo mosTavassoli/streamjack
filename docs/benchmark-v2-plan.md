@@ -90,6 +90,12 @@ Scripts are in `experiments/defense-levels-v2/`: `build-agent-v2.ps1`, `bench-v2
 - Only attempts with no model call, or an explicit rate limit, are retried by the harness. Invalid model output, provider
   errors, and interrupted attempts are final results, so retries cannot select for well-behaved answers.
 - After every attempt, the served model and the number of model calls are checked; a mismatch stops the run.
+- A provider error (key, model access, unsupported request, server error) halts the run, and a halted run refuses to
+  resume until a person has inspected it. Exit codes: 0 every trial of the invocation completed, 3 cost limit,
+  4 stopped (usage check or halted run), 5 provider error, 6 some trials ended without completing.
+- The OpenAI API is pinned to Chat Completions, so the real endpoint receives the same request the mock tests check.
+- `check-harness.ps1` runs 15 free checks against `MockOpenAi.java`, including crashes before and after a status write,
+  a wrong served model, a missing usage report, HTTP 429 and 500 responses, the cost limit, and changed settings.
 - Settings, scenario files, the runner, and the agent build are fingerprinted; resuming after any change is refused.
 - A frozen trial manifest keyed by model, mode, scenario, variant, and replicate. Each provider attempt is recorded.
   An interrupted run resumes from the manifest without repeating completed trials.

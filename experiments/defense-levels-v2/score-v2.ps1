@@ -143,6 +143,8 @@ $rows = foreach ($trial in Import-Csv (Join-Path $Run 'manifest.csv')) {
         outcome = if ($final) { $final.outcome } else { 'not run' }
         attempts = $attempts.Count
         modelCalls = $responses.Count; modelErrors = @($usage | Where-Object outcome -eq 'error').Count
+        # Answers cut off by the output cap (the cap includes hidden reasoning tokens for reasoning models).
+        truncated = @($responses | Where-Object { $_.finishReason -eq 'LENGTH' }).Count
         inputTokens = ($responses | Measure-Object inputTokens -Sum).Sum
         outputTokens = ($responses | Measure-Object outputTokens -Sum).Sum
         servedModels = (($responses | ForEach-Object model | Sort-Object -Unique) -join ' ')

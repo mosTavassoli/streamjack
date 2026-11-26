@@ -45,16 +45,16 @@ $valid = @($rows | Where-Object { $_.outcome -eq 'completed' -and $_.evidence -e
 
 '## Execution'
 ''
-"| Model | Mode | Family | Variant | $($outcomes -join ' | ') | Invalid evidence | Retried | Model calls | Input tokens | Output tokens | Served models |"
-"|---|---|---|---|$(($outcomes | ForEach-Object { '---:' }) -join '|')|---:|---:|---:|---:|---:|---|"
+"| Model | Mode | Family | Variant | $($outcomes -join ' | ') | Invalid evidence | Retried | Model calls | Truncated | Input tokens | Output tokens | Served models |"
+"|---|---|---|---|$(($outcomes | ForEach-Object { '---:' }) -join '|')|---:|---:|---:|---:|---:|---:|---|"
 foreach ($model in $models) { foreach ($mode in $modes) {
     foreach ($group in (@($rows | Where-Object { $_.model -eq $model -and $_.mode -eq $mode }) | Group-Object family, variant | Sort-Object Name)) {
         $cell = @($group.Group)
         $counts = foreach ($outcome in $outcomes) { Count $cell { $_.outcome -eq $outcome } }
-        '| {0} | {1} | {2} | {3} | {4} | {5} | {6} | {7} | {8} | {9} | {10} |' -f $model, $mode, $cell[0].family, $cell[0].variant,
+        '| {0} | {1} | {2} | {3} | {4} | {5} | {6} | {7} | {8} | {9} | {10} | {11} |' -f $model, $mode, $cell[0].family, $cell[0].variant,
             ($counts -join ' | '), (Count $cell { $_.outcome -eq 'completed' -and $_.evidence -ne 'valid' }),
             (Count $cell { [int]$_.attempts -gt 1 }), (($cell | Measure-Object modelCalls -Sum).Sum),
-            (($cell | Measure-Object inputTokens -Sum).Sum), (($cell | Measure-Object outputTokens -Sum).Sum),
+            (($cell | Measure-Object truncated -Sum).Sum), (($cell | Measure-Object inputTokens -Sum).Sum), (($cell | Measure-Object outputTokens -Sum).Sum),
             (($cell | ForEach-Object servedModels | Where-Object { $_ } | ForEach-Object { $_ -split ' ' } | Sort-Object -Unique) -join ', ')
     }
 } }
