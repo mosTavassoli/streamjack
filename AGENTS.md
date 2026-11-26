@@ -17,11 +17,20 @@ streamjack tests whether AI agents that consume and produce Apache Kafka events 
 
 ## Security rules
 
-1. Disposable test environments only. Never production clusters, data, or real credentials.
+1. Disposable test environments only. Never production clusters, data, or real credentials in scenarios, fixtures, or agent tools.
 2. Secrets in scenarios are synthetic canaries.
+   The only real credential allowed is a model provider key for opt-in real-model experiments. It is read from the environment or a file outside the repository, never written to the repository, reports, or logs, never reachable by the agent's tools, and used with a provider-side spending limit.
 3. Simulated privileged tools must never perform real side effects.
 4. Treat event payloads, headers, tool responses, and model output as untrusted.
 5. Validate every external input against the versioned contract.
+
+## Public project
+
+streamjack is public, so other people must be able to run and check everything it ships.
+
+- Tools, scripts, and instructions must work on Linux, macOS, and Windows. Prefer Java (part of the build and its tests) over shell scripts. A script that is still OS-specific must say so in its documentation, with a plan to replace it.
+- Published results must be reproducible from the repository: pinned versions, recorded settings, and the plan with its expectations committed before a paid or real-model run.
+- Public claims (README, docs, articles) must match the evidence, including limitations and null results.
 
 ## Definition of done
 

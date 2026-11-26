@@ -84,6 +84,11 @@ no effect was detected at this sample size, not that the model or prompt is safe
 Scripts are in `experiments/defense-levels-v2/`: `build-agent-v2.ps1`, `bench-v2.ps1`, `score-v2.ps1` (with
 `-SelfTest`), `analyze-v2.ps1`, and `MockOpenAi.java` for free end-to-end checks.
 
+**Platform.** These PowerShell scripts were the first version and run only on Windows. Before any paid run, the
+harness moves into a cross-platform Java module (`streamjack-bench`) with the same behavior, so anyone can reproduce
+the benchmark on Linux, macOS, or Windows. Its logic is tested with JUnit on all three in CI; the paid run uses the
+Java version, and the scripts are removed once it is validated.
+
 - A fresh Kafka broker and agent process for every trial; state is kept between the events of one scenario only.
 - The OpenAI client retries a failed request (server error, rate limit, timeout) once; it cannot be set lower. Failed
   requests are generally not billed, and any attempt with a model error counts at the worst-case trial cost.

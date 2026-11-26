@@ -58,7 +58,7 @@ These results are consistent with recent research. They confirm known patterns i
 
 ## Reproduce
 
-Requires Windows PowerShell, Java 21, Maven, Docker running Linux containers, and Ollama. From the repository root:
+Requires Windows PowerShell, Java 21, Maven, Docker running Linux containers, and Ollama. These scripts are Windows-only; the [v2 benchmark](benchmark-v2-plan.md) replaces them with a cross-platform Java harness. From the repository root:
 
 ```powershell
 mvn install -DskipTests
