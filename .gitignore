@@ -1,4 +1,5 @@
 target/
+/benchmark-runs/
 *.class
 *.log
 .idea/

@@ -56,9 +56,14 @@ See [ADR-0001](adr/0001-ticket-agent-vertical-slice.md) for the scope decision.
 | Checks | Deterministic security and utility evaluation | `streamjack-core` |
 | Report | Versioned JSON results and run summary | `streamjack-core` |
 | Kafka runner | Topic setup, ordered production, correlation, bounded collection, CLI | `streamjack-kafka` |
-| Reference agent | Quarkus ticket workflow, scripted/Ollama model modes, hardened/vulnerable controls | `sample-agent` |
+| Reference agent | Quarkus ticket workflow, scripted/Ollama/OpenAI model modes, application controls | `sample-agent` |
+| Benchmark harness | Trial scheduling and recovery, spend estimates, scoring and analysis for the [v2 experiment](benchmark-v2-plan.md) | `streamjack-bench` |
 
 `streamjack-core` deliberately has no Kafka, Quarkus, or LLM dependency.
+
+The benchmark harness orchestrates disposable fixtures around the Kafka runner. Its manifest, attempt logs and
+scores are experiment artifacts, separate from the scenario and report contracts. The runner still talks to the
+agent under test only through Kafka.
 
 ## Trust boundaries
 

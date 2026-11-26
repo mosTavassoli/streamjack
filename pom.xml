@@ -20,6 +20,7 @@
         <module>streamjack-core</module>
         <module>streamjack-kafka</module>
         <module>sample-agent</module>
+        <module>streamjack-bench</module>
     </modules>
 
     <properties>

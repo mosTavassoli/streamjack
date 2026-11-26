@@ -81,13 +81,39 @@ no effect was detected at this sample size, not that the model or prompt is safe
 
 ## Execution
 
-Scripts are in `experiments/defense-levels-v2/`: `build-agent-v2.ps1`, `bench-v2.ps1`, `score-v2.ps1` (with
-`-SelfTest`), `analyze-v2.ps1`, and `MockOpenAi.java` for free end-to-end checks.
+The Java harness is in `streamjack-bench`. The existing Windows-only v2 scripts are the prototype and are not used
+for paid runs. Their run directories are not interchangeable with the Java harness.
 
-**Platform.** These PowerShell scripts were the first version and run only on Windows. Before any paid run, the
-harness moves into a cross-platform Java module (`streamjack-bench`) with the same behavior, so anyone can reproduce
-the benchmark on Linux, macOS, or Windows. Its logic is tested with JUnit on all three in CI; the paid run uses the
-Java version, and the scripts are removed once it is validated.
+From the repository root, with Java 21, Maven and Docker running Linux containers:
+
+```text
+mvn -pl "sample-agent,streamjack-bench" -am package -DskipTests "-Dquarkus.langchain4j.chat-model.provider=openai"
+java -jar streamjack-bench/target/streamjack-bench-0.3.0-SNAPSHOT-all.jar --help
+```
+
+Run the free packaged-agent checks without a key:
+
+```text
+mvn -pl streamjack-bench -am verify "-Dit.test=BenchMockIT" "-Dfailsafe.failIfNoSpecifiedTests=false" "-Dbench.agent-dir=../sample-agent/target/quarkus-app"
+```
+
+CI exercises the storage, resume, budget, scoring and analysis logic on Linux, macOS and Windows. The Linux job
+also runs the packaged agent with a disposable broker and a loopback mock. The Docker-backed test can be run
+locally on the other platforms with a compatible Docker installation; a passing unit test does not certify Docker
+integration there.
+
+After the free checks pass and spending is approved, start with **one supervised trial** in a fresh output directory:
+
+```text
+java -jar streamjack-bench/target/streamjack-bench-0.3.0-SNAPSHOT-all.jar run --model gpt-6-luna --agent-dir sample-agent/target/quarkus-app --out benchmark-runs/luna-smoke --replicates 1 --modes NEUTRAL --scenario sj-101 --max-attempts 1 --max-trials 1 --input-price 0.10 --output-price 0.50 --cost-limit 0.20
+java -jar streamjack-bench/target/streamjack-bench-0.3.0-SNAPSHOT-all.jar score --run benchmark-runs/luna-smoke
+java -jar streamjack-bench/target/streamjack-bench-0.3.0-SNAPSHOT-all.jar analyze --scores benchmark-runs/luna-smoke/scores.json
+```
+
+Keep the smoke run, pilots and confirmation runs in separate child directories under one dedicated spend directory.
+Do not pool smoke or pilot rows with confirmation results. Check the served model, response count, token counts,
+finish reasons, valid evidence and provider usage before expanding. The command above uses a bounded estimate, not a
+guarantee on the provider bill.
 
 - A fresh Kafka broker and agent process for every trial; state is kept between the events of one scenario only.
 - The OpenAI client retries a failed request (server error, rate limit, timeout) once; it cannot be set lower. Failed
@@ -99,17 +125,18 @@ Java version, and the scripts are removed once it is validated.
   resume until a person has inspected it. Exit codes: 0 every trial of the invocation completed, 3 cost limit,
   4 stopped (usage check or halted run), 5 provider error, 6 some trials ended without completing.
 - The OpenAI API is pinned to Chat Completions, so the real endpoint receives the same request the mock tests check.
-- `check-harness.ps1` runs 15 free checks against `MockOpenAi.java`, including crashes before and after a status write,
-  a wrong served model, a missing usage report, HTTP 429 and 500 responses, the cost limit, and changed settings.
-- Settings, scenario files, the runner, and the agent build are fingerprinted; resuming after any change is refused.
-- A frozen trial manifest keyed by model, mode, scenario, variant, and replicate. Each provider attempt is recorded.
+- JUnit checks cover recovery on both sides of a status write, wrong served models, missing usage, HTTP 429 and 500
+  responses, the spend guard and changed settings.
+- Settings, scenario files, the harness and the agent build are fingerprinted; resuming after a change is refused.
+- A frozen trial manifest keyed by model, mode, scenario, variant, and replicate. Each trial attempt is recorded;
+  the usage log records model outcomes, not each internal HTTP retry.
   An interrupted run resumes from the manifest without repeating completed trials.
 - Variants are interleaved, not run in blocks.
 - Bounded retries with backoff on rate limits; a trial with an ambiguous outcome is marked unknown, not retried
   silently.
-- Model name returned by the provider, sampling settings, and prompt hashes are recorded with the results.
-- Billed output tokens are capped per call, and a local cumulative cost limit (including pilots and retries) stops
-  the run.
+- The served model name and token counts are recorded; the agent build fingerprint covers its prompts and settings.
+- Billed output tokens are capped per request. A local spend estimate (including pilots and the reserve for unclear
+  attempts) stops the run before another attempt; reconcile it with provider usage.
 
 ## Models and size
 
@@ -147,6 +174,7 @@ Java version, and the scripts are removed once it is validated.
 
 ## Safety
 
-Only synthetic canaries and simulated tools are used. The OpenAI API key is read from an environment variable, is
-never written to the repository, reports, or logs, and is not reachable by the agent's tools. A monthly spending limit
-is set on the OpenAI account before any paid run, in addition to the local cost limit.
+Only synthetic canaries and simulated tools are used. Set `OPENAI_API_KEY` or supply `--api-key-file` pointing
+outside the repository (by default `.streamjack/openai-api-key.txt` under your home directory). The key is not
+written to reports or logs, is not available to the simulated tools, and is never sent to the mock. Check the
+provider's own spend controls before a paid run; a budget alert is not the same as a hard billing limit.

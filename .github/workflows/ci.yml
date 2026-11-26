@@ -22,3 +22,29 @@ jobs:
           java-version: "21"
           cache: maven
       - run: mvn --batch-mode --no-transfer-progress verify
+      - name: Package sample agent for the loopback mock
+        run: mvn --batch-mode --no-transfer-progress -pl sample-agent -am package -DskipTests -Dquarkus.langchain4j.chat-model.provider=openai
+      - name: Verify the packaged agent and harness against the loopback mock
+        run: >-
+          mvn --batch-mode --no-transfer-progress -pl streamjack-bench -am verify
+          -Dit.test=BenchMockIT -Dfailsafe.failIfNoSpecifiedTests=false
+          "-Dbench.agent-dir=${{ github.workspace }}/sample-agent/target/quarkus-app"
+
+  benchmark-portability:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+      - name: Test benchmark state, scoring and analysis without Docker
+        run: mvn --batch-mode --no-transfer-progress -pl streamjack-bench -am test

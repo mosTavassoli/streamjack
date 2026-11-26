@@ -161,6 +161,9 @@ To compare where protection comes from, set `STREAMJACK_AGENT_SECURITY_MODE` to 
 
 See the [local Ollama experiment](docs/ollama-experiment.md) for a before-and-after comparison of how explicit category definitions affected ticket classification.
 
+The [v2 benchmark plan](docs/benchmark-v2-plan.md) documents a Java harness for reproducible runs on Linux, macOS
+and Windows, including how to check the packaged agent against a local mock without an API key or paid calls.
+
 ## Slow agents and Kafka share groups
 
 With Kafka share groups (queue-style consumption, enabled by default from Kafka 4.2), each record is locked to one consumer for 30 s by default. An agent that takes longer than the lock gets the same event again, up to five times, and its side effects can repeat.
