@@ -18,7 +18,8 @@ public record Manifest(List<Trial> trials) {
         trials = List.copyOf(trials);
     }
 
-    static Manifest plan(List<Path> scenarioFiles, List<String> modes, int replicates, long seed) {
+    static Manifest plan(Path repository, List<Path> scenarioFiles, List<String> modes, int replicates, long seed) {
+        Path root = repository.toAbsolutePath().normalize();
         ScenarioLoader loader = new ScenarioLoader();
         record Cell(String mode, Path file, int events) {
         }
@@ -39,10 +40,19 @@ public record Manifest(List<Trial> trials) {
                 order++;
                 String scenario = scenarioName(cell.file());
                 trials.add(new Trial(String.format(Locale.ROOT, "%04d-%s-%s-r%d", order, cell.mode(), scenario, replicate),
-                        cell.mode(), scenario, cell.file().toAbsolutePath().normalize().toString(), replicate, cell.events()));
+                        cell.mode(), scenario, relative(root, cell.file()), replicate, cell.events()));
             }
         }
         return new Manifest(trials);
+    }
+
+    /** The scenario path relative to the repository, with forward slashes on every OS. */
+    static String relative(Path repository, Path file) {
+        Path absolute = file.toAbsolutePath().normalize();
+        if (!absolute.startsWith(repository)) {
+            throw new IllegalArgumentException("Scenario outside the repository: " + file);
+        }
+        return repository.relativize(absolute).toString().replace('\\', '/');
     }
 
     static String scenarioName(Path file) {

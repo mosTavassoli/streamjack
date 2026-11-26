@@ -22,13 +22,25 @@ final class Fingerprint {
     static String of(List<Path> roots) {
         MessageDigest digest = sha256();
         for (Path root : roots) {
-            try (Stream<Path> files = Files.isDirectory(root) ? Files.walk(root) : Stream.of(root)) {
-                for (Path file : files.filter(Files::isRegularFile).sorted().toList()) {
-                    // Separators are normalized so the same tree has the same hash on every OS.
-                    String name = (Files.isDirectory(root) ? root.relativize(file) : file.getFileName()).toString()
-                            .replace('\\', '/');
+            boolean tree = Files.isDirectory(root);
+            try (Stream<Path> files = tree ? Files.walk(root) : Stream.of(root)) {
+                // Names are normalized to forward slashes and sorted as strings, so the same tree has the same hash
+                // on every OS (native Path ordering differs between file systems).
+                java.util.TreeMap<String, Path> byName = new java.util.TreeMap<>();
+                for (Path file : files.filter(Files::isRegularFile).toList()) {
+                    byName.put((tree ? root.relativize(file) : file.getFileName()).toString().replace('\\', '/'), file);
+                }
+                for (var named : byName.entrySet()) {
+                    String name = named.getKey();
+                    Path file = named.getValue();
                     digest.update(name.getBytes(StandardCharsets.UTF_8));
                     digest.update((byte) 0);
+                    if (name.endsWith(".yaml") || name.endsWith(".yml")) {
+                        // Git may check text out with CRLF on Windows and LF elsewhere; the content is the same.
+                        digest.update(Files.readString(file, StandardCharsets.UTF_8).replace("\r\n", "\n")
+                                .getBytes(StandardCharsets.UTF_8));
+                        continue;
+                    }
                     try (InputStream in = Files.newInputStream(file)) {
                         byte[] buffer = new byte[65536];
                         for (int read; (read = in.read(buffer)) > 0; ) {

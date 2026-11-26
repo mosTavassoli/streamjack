@@ -23,7 +23,8 @@ import picocli.CommandLine.Spec;
 
 /** Command line of the benchmark harness. Run from the repository root; see docs/benchmark-v2-plan.md. */
 @Command(name = "streamjack-bench", mixinStandardHelpOptions = true,
-        subcommands = {Bench.Run.class, Bench.Score.class, Bench.Analyze.class, Bench.MockOpenAi.class},
+        subcommands = {Bench.Run.class, Bench.Acknowledge.class, Bench.Score.class, Bench.Analyze.class,
+                Bench.MockOpenAi.class},
         description = "Real-model defense-levels benchmark harness.")
 public final class Bench {
 
@@ -100,8 +101,8 @@ public final class Bench {
                 BenchSettings settings = Setup.settings(model, baseUrl, replicates, modes, seed, inputPrice, outputPrice,
                         trialCostReserve, scenarioFiles, agentDir);
                 BenchRun run = new BenchRun(
-                        new BenchRun.Options(settings, out, scenarioFiles, costLimit, maxAttempts, maxTrials),
-                        new DockerTrialExecutor(new DockerTrialExecutor.Agent(agentDir, model, baseUrl, apiKey)),
+                        new BenchRun.Options(settings, out, repository, scenarioFiles, costLimit, maxAttempts, maxTrials),
+                        new DockerTrialExecutor(new DockerTrialExecutor.Agent(agentDir, model, baseUrl, apiKey), repository),
                         duration -> {
                             try {
                                 Thread.sleep(duration.toMillis());
@@ -113,6 +114,32 @@ public final class Bench {
                         log);
                 return run.run();
             } catch (IllegalArgumentException | IllegalStateException e) {
+                spec.commandLine().getErr().println("streamjack-bench: " + e.getMessage());
+                return 2;
+            }
+        }
+    }
+
+    @Command(name = "acknowledge",
+            description = "After inspecting a halted trial, let its run continue with the next trial (it is not replayed).")
+    static final class Acknowledge implements Callable<Integer> {
+
+        @Spec
+        CommandSpec spec;
+
+        @Option(names = "--trial", required = true, description = "The halted trial's directory")
+        Path trial;
+
+        @Option(names = "--note", description = "What was inspected and why it is safe to continue")
+        String note;
+
+        @Override
+        public Integer call() {
+            try {
+                BenchRun.acknowledge(trial, note);
+                spec.commandLine().getOut().println("Acknowledged " + trial + "; the run continues with the next trial.");
+                return 0;
+            } catch (IllegalArgumentException e) {
                 spec.commandLine().getErr().println("streamjack-bench: " + e.getMessage());
                 return 2;
             }

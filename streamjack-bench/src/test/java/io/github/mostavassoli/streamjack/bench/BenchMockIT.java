@@ -66,8 +66,9 @@ class BenchMockIT {
 
     private BenchRun run(MockOpenAiServer mock, List<Path> scenarios, int attempts, List<Duration> backoffs) {
         var settings = Setup.settings(MODEL, mock.baseUrl(), 1, List.of("NEUTRAL"), 42, 1, 2, 0.12, scenarios, AGENT);
-        return new BenchRun(new BenchRun.Options(settings, work.resolve("run"), scenarios, 1, attempts, 0),
-                new DockerTrialExecutor(new DockerTrialExecutor.Agent(AGENT, MODEL, mock.baseUrl(), "never-send-this")),
+        return new BenchRun(new BenchRun.Options(settings, work.resolve("run"), Path.of(".."), scenarios, 1, attempts, 0),
+                new DockerTrialExecutor(new DockerTrialExecutor.Agent(AGENT, MODEL, mock.baseUrl(), "never-send-this"),
+                        Path.of("..")),
                 backoffs::add, new PrintWriter(new StringWriter()));
     }
 }

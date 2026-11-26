@@ -51,6 +51,10 @@ final class Spend {
         int priced = 0;
         boolean unclear = status == null || status.outcome().costUnclear();
         for (Usage.Entry entry : entries) {
+            if (entry.response() && !Usage.servedAs(settings.model(), entry.model())) {
+                // Another model's tokens cannot be priced at this run's prices.
+                unclear = true;
+            }
             if (entry.priced()) {
                 // Completion tokens include reasoning; prompt tokens include cached ones, priced at the full input
                 // price, which overstates cost when the provider applies a cache discount.

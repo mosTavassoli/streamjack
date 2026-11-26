@@ -16,7 +16,8 @@ import org.junit.jupiter.api.io.TempDir;
 class BenchRunTest {
 
     private static final String MODEL = "mock-model";
-    private static final Path SCENARIO = Path.of("..", "experiments", "defense-levels-v2", "scenarios", "sj-101.yaml");
+    private static final Path REPOSITORY = Path.of("..");
+    private static final Path SCENARIO = REPOSITORY.resolve("experiments/defense-levels-v2/scenarios/sj-101.yaml");
 
     @TempDir
     Path work;
@@ -67,8 +68,8 @@ class BenchRunTest {
         assertThat(run(first, successful(new AtomicInteger(), MODEL, true))).isZero();
         assertThat(Spend.total(work)).isCloseTo(0.001, org.assertj.core.data.Offset.offset(1e-10));
         BenchRun.Options second = options("second", 1, 1);
-        BenchRun.Options limited = new BenchRun.Options(second.settings(), second.out(), second.scenarioFiles(),
-                second.settings().trialCostReserve() + 0.0005, 1, 0);
+        BenchRun.Options limited = new BenchRun.Options(second.settings(), second.out(), REPOSITORY,
+                second.scenarioFiles(), second.settings().trialCostReserve() + 0.0005, 1, 0);
         assertThat(run(limited, rejectDispatch())).isEqualTo(BenchRun.COST_LIMIT);
     }
 
@@ -107,10 +108,10 @@ class BenchRunTest {
     @Test
     void rejectsNonFiniteMoneySettingsAndNegativeTrialLimit() {
         BenchRun.Options options = options("run", 1, 1);
-        assertThatThrownBy(() -> new BenchRun.Options(options.settings(), options.out(), options.scenarioFiles(),
-                Double.NaN, 1, 0)).isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new BenchRun.Options(options.settings(), options.out(), options.scenarioFiles(),
-                1, 1, -1)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new BenchRun.Options(options.settings(), options.out(), REPOSITORY,
+                options.scenarioFiles(), Double.NaN, 1, 0)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new BenchRun.Options(options.settings(), options.out(), REPOSITORY,
+                options.scenarioFiles(), 1, 1, -1)).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new BenchSettings(MODEL, "mock", 1, List.of("NEUTRAL"), 42,
                 Double.POSITIVE_INFINITY, 1, 0.12, List.of("sj-101"), Map.of()))
                 .isInstanceOf(IllegalArgumentException.class);
@@ -123,15 +124,75 @@ class BenchRunTest {
         assertThat(mock.apiKey()).isEqualTo(Setup.MOCK_KEY);
         var real = new DockerTrialExecutor.Agent(work, MODEL, null, syntheticKey);
         assertThat(real.toString()).doesNotContain(syntheticKey);
-        assertThat(DockerTrialExecutor.isConfigurationOverride("qUaRkUs_Profile")).isTrue();
-        assertThat(DockerTrialExecutor.isConfigurationOverride("JDK_JAVA_OPTIONS")).isTrue();
-        assertThat(DockerTrialExecutor.isConfigurationOverride("PATH")).isFalse();
+        // An allowlist: configuration under any other name, including Quarkus profile variables, is not inherited.
+        assertThat(DockerTrialExecutor.inherited("PATH")).isTrue();
+        assertThat(DockerTrialExecutor.inherited("SystemRoot")).isTrue();
+        assertThat(DockerTrialExecutor.inherited("_PROD_QUARKUS_LANGCHAIN4J_OPENAI_BASE_URL")).isFalse();
+        assertThat(DockerTrialExecutor.inherited("qUaRkUs_Profile")).isFalse();
+        assertThat(DockerTrialExecutor.inherited("OPENAI_API_KEY")).isFalse();
+        assertThat(DockerTrialExecutor.inherited("JDK_JAVA_OPTIONS")).isFalse();
+    }
+
+    @Test
+    void partialRateLimitIsNotRetriedAndProviderErrorsAreNeverLost() throws Exception {
+        // One of two calls rate-limited, the other unaccounted for: it may have been processed, so no replay.
+        BenchRun.Options options = options("partial", 1, 3);
+        AtomicInteger dispatches = new AtomicInteger();
+        assertThat(run(options, (trial, dir) -> {
+            dispatches.incrementAndGet();
+            write(dir, "{\"outcome\":\"error\",\"error\":\"dev.langchain4j.exception.RateLimitException\"}\n");
+            return AttemptStatus.of(Outcome.RATE_LIMITED, "provider rate limit", trial.events());
+        })).isEqualTo(BenchRun.INCOMPLETE);
+        assertThat(dispatches.get()).isEqualTo(1);
+        assertThat(finalStatus(firstTrial(options)).outcome()).isEqualTo(Outcome.UNKNOWN);
+
+        // An executor that logs a provider error and then throws: the error still halts the run.
+        BenchRun.Options thrown = options("thrown", 1, 3);
+        assertThat(run(thrown, (trial, dir) -> {
+            write(dir, "{\"outcome\":\"error\",\"error\":\"dev.langchain4j.exception.AuthenticationException\"}\n");
+            throw new IllegalStateException("report write failed");
+        })).isEqualTo(BenchRun.PROVIDER_ERROR);
+        assertThat(finalStatus(firstTrial(thrown)).outcome()).isEqualTo(Outcome.PROVIDER_ERROR);
+    }
+
+    @Test
+    void aHaltInOneRunBlocksEverySiblingRunUntilAcknowledged() {
+        BenchRun.Options wrong = options("wrong", 1, 1);
+        assertThat(run(wrong, successful(new AtomicInteger(), "some-other-model", true))).isEqualTo(BenchRun.STOPPED);
+        // The other model's tokens cannot be priced at this run's prices, so the attempt counts at the reserve.
+        assertThat(Spend.total(work)).isGreaterThanOrEqualTo(wrong.settings().trialCostReserve());
+
+        BenchRun.Options sibling = options("sibling", 1, 1);
+        assertThat(run(sibling, rejectDispatch())).isEqualTo(BenchRun.STOPPED);
+
+        // Acknowledging does not replay the halted trial; the sibling may then dispatch.
+        BenchRun.acknowledge(firstTrial(wrong), "checked provider usage");
+        assertThat(run(wrong, rejectDispatch())).isEqualTo(BenchRun.INCOMPLETE);
+        assertThat(run(sibling, successful(new AtomicInteger(), MODEL, true))).isZero();
+        assertThatThrownBy(() -> BenchRun.acknowledge(firstTrial(sibling), "not halted"))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void manifestStoresRepositoryRelativePaths() {
+        BenchRun.Options options = options("run", 1, 1);
+        assertThat(run(options, successful(new AtomicInteger(), MODEL, true))).isZero();
+        Trial trial = StateFiles.read(options.out().resolve(BenchRun.MANIFEST), Manifest.class).trials().getFirst();
+        assertThat(trial.scenarioFile()).isEqualTo("experiments/defense-levels-v2/scenarios/sj-101.yaml");
+    }
+
+    private static void write(Path dir, String usage) {
+        try {
+            Files.writeString(dir.resolve(Usage.FILE), usage);
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
     }
 
     private BenchRun.Options options(String name, int replicates, int attempts) {
         BenchSettings settings = new BenchSettings(MODEL, "mock", replicates, List.of("NEUTRAL"), 42, 1, 2, 0.12,
                 List.of("sj-101"), Map.of("test", "test"));
-        return new BenchRun.Options(settings, work.resolve(name), List.of(SCENARIO), 10, attempts, 0);
+        return new BenchRun.Options(settings, work.resolve(name), REPOSITORY, List.of(SCENARIO), 10, attempts, 0);
     }
 
     private static int run(BenchRun.Options options, TrialExecutor executor) {

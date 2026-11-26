@@ -27,8 +27,7 @@ final class AttemptClassifier {
         if (result.execution() == ExecutionStatus.COMPLETED && evidenceWritten && errors.isEmpty()) {
             return AttemptStatus.of(Outcome.COMPLETED, "", trial.events());
         }
-        if (!errors.isEmpty() && responses == 0
-                && errors.stream().allMatch(error -> error.error() != null && error.error().contains("RateLimit"))) {
+        if (retryableRateLimit(trial, usage)) {
             return AttemptStatus.of(Outcome.RATE_LIMITED, "provider rate limit", trial.events());
         }
         if (!errors.isEmpty()) {
@@ -48,5 +47,43 @@ final class AttemptClassifier {
                     trial.events());
         }
         return AttemptStatus.of(Outcome.FAILED, "execution " + result.execution(), trial.events());
+    }
+
+    /**
+     * A rate limit is retryable only if every expected model call was explicitly rate-limited and nothing else was
+     * logged: then no request was processed. With fewer rate-limit entries than calls, another request may have
+     * reached the provider, so the attempt is not retried.
+     */
+    static boolean retryableRateLimit(Trial trial, List<Usage.Entry> usage) {
+        return usage.size() == trial.events() && !usage.isEmpty() && usage.stream().allMatch(AttemptClassifier::rateLimit);
+    }
+
+    /**
+     * Checks a status, fresh or recovered from an earlier invocation, against the usage log, the single source for
+     * what was sent: a logged provider error always halts the run, a retryable outcome must still be provably
+     * unbilled, and anything else stays as recorded.
+     */
+    static AttemptStatus reconcile(Trial trial, AttemptStatus status, List<Usage.Entry> usage) {
+        List<String> providerErrors = usage.stream()
+                .filter(entry -> "error".equals(entry.outcome()) && !rateLimit(entry))
+                .map(entry -> String.valueOf(entry.error())).distinct().sorted().toList();
+        if (!providerErrors.isEmpty() && status.outcome() != Outcome.PROVIDER_ERROR) {
+            return withOutcome(status, Outcome.PROVIDER_ERROR, String.join(" ", providerErrors));
+        }
+        if (status.outcome() == Outcome.SETUP_FAILED && !usage.isEmpty()) {
+            return withOutcome(status, Outcome.UNKNOWN, "setup reported a failure after model calls were logged");
+        }
+        if (status.outcome() == Outcome.RATE_LIMITED && !retryableRateLimit(trial, usage)) {
+            return withOutcome(status, Outcome.UNKNOWN, "rate limit with calls that may have been processed");
+        }
+        return status;
+    }
+
+    private static boolean rateLimit(Usage.Entry entry) {
+        return "error".equals(entry.outcome()) && entry.error() != null && entry.error().contains("RateLimit");
+    }
+
+    private static AttemptStatus withOutcome(AttemptStatus status, Outcome outcome, String reason) {
+        return new AttemptStatus(outcome, reason, status.events(), status.attempt(), status.started(), status.finished());
     }
 }

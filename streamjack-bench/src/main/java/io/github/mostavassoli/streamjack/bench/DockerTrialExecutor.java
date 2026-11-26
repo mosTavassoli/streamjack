@@ -55,9 +55,12 @@ public final class DockerTrialExecutor implements TrialExecutor {
     }
 
     private final Agent agent;
+    private final Path repository;
 
-    public DockerTrialExecutor(Agent agent) {
+    /** @param repository the repository root that the manifest's scenario paths are relative to */
+    public DockerTrialExecutor(Agent agent, Path repository) {
         this.agent = agent;
+        this.repository = repository.toAbsolutePath().normalize();
     }
 
     @Override
@@ -66,37 +69,47 @@ public final class DockerTrialExecutor implements TrialExecutor {
         KafkaContainer broker = null;
         Process process = null;
         boolean scenarioStarted = false;
+        AttemptStatus status;
         try {
             broker = startBroker();
             process = startAgent(trial, attemptDir, broker.getBootstrapServers());
             if (!waitUntilStarted(process, attemptDir.resolve("agent.log"))) {
-                return finish(AttemptStatus.of(Outcome.SETUP_FAILED, "the agent did not start", trial.events()), started);
+                status = AttemptStatus.of(Outcome.SETUP_FAILED, "the agent did not start", trial.events());
+            } else {
+                scenarioStarted = true;
+                ScenarioExecution execution = new KafkaScenarioRunner(new RunnerConfiguration(
+                        broker.getBootstrapServers(), SCENARIO_TIMEOUT, Duration.ofSeconds(1), 10_000, true, Map.of()))
+                        .run(new ScenarioLoader().load(repository.resolve(trial.scenarioFile())));
+                ScenarioResult result = execution.result();
+                new ReportWriter().write(RunReport.of("openai-" + agent.model() + "-" + trial.mode(),
+                        List.of(result)), attemptDir.resolve("report.json"));
+                Path evidence = new EvidenceWriter().write(execution, attemptDir.resolve("evidence"));
+                // The usage log is complete only once the agent has exited.
+                boolean exited = stopAgent(process);
+                process = null;
+                status = exited
+                        ? AttemptClassifier.classify(trial, result, Files.exists(evidence), Usage.read(attemptDir))
+                        : AttemptStatus.of(Outcome.UNKNOWN, "the agent did not exit", trial.events());
             }
-            scenarioStarted = true;
-            ScenarioExecution execution = new KafkaScenarioRunner(new RunnerConfiguration(
-                    broker.getBootstrapServers(), SCENARIO_TIMEOUT, Duration.ofSeconds(1), 10_000, true, Map.of()))
-                    .run(new ScenarioLoader().load(Path.of(trial.scenarioFile())));
-            ScenarioResult result = execution.result();
-            new ReportWriter().write(RunReport.of("openai-" + agent.model() + "-" + trial.mode(),
-                    List.of(result)), attemptDir.resolve("report.json"));
-            Path evidence = new EvidenceWriter().write(execution, attemptDir.resolve("evidence"));
-            // Let the agent finish writing its usage log before it is read.
-            stopAgent(process);
-            process = null;
-            return finish(AttemptClassifier.classify(trial, result, Files.exists(evidence), Usage.read(attemptDir)), started);
         } catch (RuntimeException | IOException e) {
             // Before the scenario starts no request can have been sent, so the attempt can be retried; afterwards a
-            // request may have been sent, so its outcome is unknown.
+            // request may have been sent, so its outcome is unknown. A logged provider error is applied by
+            // AttemptClassifier.reconcile in either case.
             Outcome outcome = scenarioStarted ? Outcome.UNKNOWN : Outcome.SETUP_FAILED;
-            return finish(AttemptStatus.of(outcome, "harness error: " + e.getClass().getSimpleName(), trial.events()), started);
+            status = AttemptStatus.of(outcome, "harness error: " + e.getClass().getSimpleName(), trial.events());
         } finally {
             if (process != null) {
                 stopAgent(process);
             }
             if (broker != null) {
-                broker.stop();
+                try {
+                    broker.stop();
+                } catch (RuntimeException e) {
+                    // Cleanup must not discard the attempt's result; the container is removed by Testcontainers.
+                }
             }
         }
+        return finish(status, started);
     }
 
     private static KafkaContainer startBroker() throws IOException {
@@ -124,8 +137,16 @@ public final class DockerTrialExecutor implements TrialExecutor {
         ProcessBuilder builder = new ProcessBuilder(java, "-Dquarkus.http.port=0", "-jar", jar.toString())
                 .directory(attemptDir.toFile());
         Map<String, String> environment = builder.environment();
-        // Runtime overrides would change the experiment without changing the fingerprinted build.
-        environment.keySet().removeIf(DockerTrialExecutor::isConfigurationOverride);
+        // An allowlist, not a blocklist: configuration can arrive under many names (for example Quarkus profile
+        // variables such as _PROD_QUARKUS_..._BASE_URL), and any of them could change the endpoint that receives the
+        // key or the experiment's settings without changing the fingerprinted build.
+        Map<String, String> inherited = new java.util.HashMap<>(environment);
+        environment.clear();
+        inherited.forEach((name, value) -> {
+            if (inherited(name)) {
+                environment.put(name, value);
+            }
+        });
         environment.put("KAFKA_BOOTSTRAP_SERVERS", bootstrapServers);
         environment.put("STREAMJACK_AGENT_MODEL", "OPENAI");
         environment.put("STREAMJACK_AGENT_SECURITY_MODE", trial.mode());
@@ -142,11 +163,17 @@ public final class DockerTrialExecutor implements TrialExecutor {
         return builder.start();
     }
 
-    static boolean isConfigurationOverride(String name) {
-        String upper = name.toUpperCase(java.util.Locale.ROOT);
-        return upper.startsWith("QUARKUS_") || upper.startsWith("MP_") || upper.startsWith("SMALLRYE_")
-                || upper.startsWith("OPENAI_") || upper.startsWith("STREAMJACK_") || upper.startsWith("KAFKA_")
-                || List.of("JAVA_TOOL_OPTIONS", "_JAVA_OPTIONS", "JDK_JAVA_OPTIONS").contains(upper);
+    /** Operating-system variables the agent's JVM may inherit; everything else is dropped. */
+    static final java.util.Set<String> ALLOWED_ENVIRONMENT = java.util.Set.of(
+            // Windows
+            "SYSTEMROOT", "SYSTEMDRIVE", "WINDIR", "COMSPEC", "PATH", "PATHEXT", "TEMP", "TMP", "USERPROFILE",
+            "USERNAME", "LOCALAPPDATA", "APPDATA", "HOMEDRIVE", "HOMEPATH", "PROCESSOR_ARCHITECTURE",
+            "NUMBER_OF_PROCESSORS",
+            // Linux and macOS
+            "HOME", "USER", "LOGNAME", "TMPDIR", "LANG", "LC_ALL", "LC_CTYPE", "TZ");
+
+    static boolean inherited(String name) {
+        return ALLOWED_ENVIRONMENT.contains(name.toUpperCase(java.util.Locale.ROOT));
     }
 
     private static boolean waitUntilStarted(Process process, Path log) throws IOException {
@@ -160,15 +187,18 @@ public final class DockerTrialExecutor implements TrialExecutor {
         return false;
     }
 
-    private static void stopAgent(Process process) {
+    /** Stops the agent and returns whether it has exited (only then is its usage log complete). */
+    private static boolean stopAgent(Process process) {
         process.destroy();
         try {
             if (!process.waitFor(30, TimeUnit.SECONDS)) {
-                process.destroyForcibly().waitFor(30, TimeUnit.SECONDS);
+                return process.destroyForcibly().waitFor(30, TimeUnit.SECONDS);
             }
+            return true;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             process.destroyForcibly();
+            return false;
         }
     }
 

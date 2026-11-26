@@ -94,7 +94,7 @@ java -jar streamjack-bench/target/streamjack-bench-0.3.0-SNAPSHOT-all.jar --help
 Run the free packaged-agent checks without a key:
 
 ```text
-mvn -pl streamjack-bench -am verify "-Dit.test=BenchMockIT" "-Dfailsafe.failIfNoSpecifiedTests=false" "-Dbench.agent-dir=../sample-agent/target/quarkus-app"
+mvn -pl streamjack-bench -am verify "-Dit.test=BenchMockIT,BenchCliIT" "-Dfailsafe.failIfNoSpecifiedTests=false" "-Dbench.agent-dir=../sample-agent/target/quarkus-app"
 ```
 
 CI exercises the storage, resume, budget, scoring and analysis logic on Linux, macOS and Windows. The Linux job
@@ -121,8 +121,12 @@ guarantee on the provider bill.
 - Only attempts with no model call, or an explicit rate limit, are retried by the harness. Invalid model output, provider
   errors, and interrupted attempts are final results, so retries cannot select for well-behaved answers.
 - After every attempt, the served model and the number of model calls are checked; a mismatch stops the run.
-- A provider error (key, model access, unsupported request, server error) halts the run, and a halted run refuses to
-  resume until a person has inspected it. Exit codes: 0 every trial of the invocation completed, 3 cost limit,
+- A provider error (key, model access, unsupported request, server error) halts the run. A halt in any run blocks
+  every run that shares the spend directory, until a person has inspected the attempt, reconciled the provider's
+  usage, and run `streamjack-bench acknowledge --trial <trial directory>`. The halted trial is never replayed; the
+  run continues with the next trial.
+- The agent process starts with an allowlist of operating-system variables plus the harness's own settings, so no
+  other configuration (for example a Quarkus profile variable that changes the endpoint) can reach it. Exit codes: 0 every trial of the invocation completed, 3 cost limit,
   4 stopped (usage check or halted run), 5 provider error, 6 some trials ended without completing.
 - The OpenAI API is pinned to Chat Completions, so the real endpoint receives the same request the mock tests check.
 - JUnit checks cover recovery on both sides of a status write, wrong served models, missing usage, HTTP 429 and 500

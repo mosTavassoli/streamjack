@@ -63,12 +63,15 @@ final class Usage {
      * Returns why the run must stop, or null. A model call the log cannot account for, or a different served model,
      * means neither the results nor the spend can be trusted.
      */
+    /** The exact alias, or the alias plus a dated snapshot suffix (for example gpt-6-luna-2026-10-01). */
+    static boolean servedAs(String requested, String served) {
+        return served != null && Pattern.matches(Pattern.quote(requested) + "(-\\d{4}-\\d{2}-\\d{2})?", served);
+    }
+
     static String problem(String model, Trial trial, AttemptStatus status, List<Entry> entries) {
-        // The exact alias, or the alias plus a dated snapshot suffix (for example gpt-6-luna-2026-10-01).
-        Pattern served = Pattern.compile(Pattern.quote(model) + "(-\\d{4}-\\d{2}-\\d{2})?");
         List<Entry> responses = entries.stream().filter(Entry::response).toList();
         for (Entry response : responses) {
-            if (response.model() == null || !served.matcher(response.model()).matches()) {
+            if (!servedAs(model, response.model())) {
                 return "served model does not match '" + model + "'";
             }
             if (!response.priced()) {

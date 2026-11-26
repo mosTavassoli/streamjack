@@ -49,9 +49,14 @@ public final class BenchRun {
         void sleep(Duration duration);
     }
 
+    /**
+     * @param repository the repository root; scenario paths are stored relative to it, so a moved checkout or another
+     *                   OS resumes the same plan
+     */
     public record Options(
             BenchSettings settings,
             Path out,
+            Path repository,
             List<Path> scenarioFiles,
             double costLimit,
             int maxAttempts,
@@ -60,6 +65,7 @@ public final class BenchRun {
         public Options {
             Objects.requireNonNull(settings, "settings");
             out = out.toAbsolutePath().normalize();
+            repository = repository.toAbsolutePath().normalize();
             scenarioFiles = List.copyOf(scenarioFiles);
             if (out.getParent() == null || out.getParent().getParent() == null
                     || !Double.isFinite(costLimit) || costLimit <= 0 || maxAttempts < 1 || maxTrials < 0) {
@@ -103,7 +109,9 @@ public final class BenchRun {
         Manifest manifest = prepare();
         Path trialsDir = options.out().resolve(TRIALS);
         try {
-            String halted = haltedTrial(trialsDir);
+            // A halt anywhere under the spend directory blocks every run that shares its budget: the halted attempt's
+            // cost may be misstated (for example, tokens of an unexpected model priced at the expected model's rates).
+            String halted = haltedTrial(spendRoot);
             if (halted != null) {
                 log.println("Refusing to continue: " + halted);
                 return STOPPED;
@@ -128,20 +136,20 @@ public final class BenchRun {
                         // Interrupted while running: it may have been billed, so it is final.
                         StateFiles.write(statusFile, AttemptStatus.of(Outcome.UNKNOWN, "interrupted", trial.events()));
                     }
-                    last = StateFiles.read(statusFile, AttemptStatus.class);
+                    // A recovered attempt is checked against its usage log exactly like a fresh one.
+                    last = AttemptClassifier.reconcile(trial, StateFiles.read(statusFile, AttemptStatus.class),
+                            Usage.read(attempt));
                     lastNumber = number(attempt);
+                    String problem = Usage.problem(options.settings().model(), trial, last, Usage.read(attempt));
+                    if (problem != null) {
+                        return stop(trialDir, trial, lastNumber, problem);
+                    }
                     if (last.outcome() == Outcome.COMPLETED) {
                         break;
                     }
                 }
                 AttemptStatus decided = null;
                 if (last != null && !last.outcome().retryable()) {
-                    // A recovered attempt gets the same usage check as a fresh one before it is accepted.
-                    Path lastDir = trialDir.resolve(ATTEMPT_PREFIX + lastNumber);
-                    String problem = Usage.problem(options.settings().model(), trial, last, Usage.read(lastDir));
-                    if (problem != null) {
-                        return stop(trialDir, trial, lastNumber, problem);
-                    }
                     decided = last.asFinal(lastNumber);
                 }
                 if (decided == null && options.maxTrials() > 0 && ran >= options.maxTrials()) {
@@ -160,7 +168,15 @@ public final class BenchRun {
                     }
                     Path attemptDir = trialDir.resolve(ATTEMPT_PREFIX + n);
                     createAttempt(attemptDir);
-                    AttemptStatus status = executor.execute(trial, attemptDir);
+                    AttemptStatus status;
+                    try {
+                        status = executor.execute(trial, attemptDir);
+                    } catch (RuntimeException e) {
+                        // The executor may have sent requests before failing, so the outcome is unknown, not retryable.
+                        status = AttemptStatus.of(Outcome.UNKNOWN, "executor error: " + e.getClass().getSimpleName(),
+                                trial.events());
+                    }
+                    status = AttemptClassifier.reconcile(trial, status, Usage.read(attemptDir));
                     StateFiles.write(attemptDir.resolve(STATUS), status);
                     log.println(trial.id() + " attempt " + n + ": " + status.outcome().wire()
                             + (status.reason().isEmpty() ? "" : " (" + status.reason() + ")"));
@@ -182,9 +198,9 @@ public final class BenchRun {
                 if (decided.outcome() != Outcome.COMPLETED) {
                     unsuccessful++;
                 }
-                if (decided.outcome().halting()) {
+                if (decided.outcome().halting() && !acknowledged(trialDir)) {
                     log.println("Stopping the run: " + trial.id() + " ended as " + decided.outcome().wire() + " ("
-                            + decided.reason() + "). Inspect it before resuming.");
+                            + decided.reason() + "). " + acknowledgeHint(trialDir));
                     return PROVIDER_ERROR;
                 }
             }
@@ -198,7 +214,7 @@ public final class BenchRun {
     private Manifest prepare() {
         Path settingsFile = options.out().resolve(SETTINGS);
         Path manifestFile = options.out().resolve(MANIFEST);
-        Manifest planned = Manifest.plan(options.scenarioFiles(), options.settings().modes(),
+        Manifest planned = Manifest.plan(options.repository(), options.scenarioFiles(), options.settings().modes(),
                 options.settings().replicates(), options.settings().seed());
         if (Files.exists(manifestFile)) {
             BenchSettings saved = StateFiles.read(settingsFile, BenchSettings.class);
@@ -225,20 +241,57 @@ public final class BenchRun {
     private int stop(Path trialDir, Trial trial, int attempt, String problem) {
         StateFiles.write(trialDir.resolve(FINAL),
                 new AttemptStatus(Outcome.STOPPED, problem, trial.events(), attempt, null, null));
-        log.println("Stopping the run: " + problem + ". Inspect " + trialDir.resolve(ATTEMPT_PREFIX + attempt) + ".");
+        log.println("Stopping the run: " + problem + ". " + acknowledgeHint(trialDir));
         return STOPPED;
     }
 
-    /** The first trial that ended with a halting outcome, described for the user, or null. */
-    private static String haltedTrial(Path trialsDir) {
-        for (Path finalFile : finals(trialsDir)) {
+    /**
+     * The first unacknowledged halted trial in any run under the spend directory, described for the user, or null.
+     * A halt is never cleared by replaying the trial; a person acknowledges it after inspecting the attempt, and the
+     * run continues with the next trial while the halted one stays recorded as unsuccessful.
+     */
+    private static String haltedTrial(Path spendRoot) {
+        for (Path finalFile : finalsUnder(spendRoot)) {
             AttemptStatus state = StateFiles.read(finalFile, AttemptStatus.class);
-            if (state.outcome().halting()) {
-                return finalFile.getParent().getFileName() + " ended as " + state.outcome().wire() + " ("
-                        + state.reason() + "). Inspect it, fix the cause, and delete " + finalFile + " to resume.";
+            if (state.outcome().halting() && !acknowledged(finalFile.getParent())) {
+                return finalFile.getParent() + " ended as " + state.outcome().wire() + " (" + state.reason() + "). "
+                        + acknowledgeHint(finalFile.getParent());
             }
         }
         return null;
+    }
+
+    static final String ACKNOWLEDGED = "acknowledged.json";
+
+    /** Records that a person inspected a halted trial; the run then continues without replaying it. */
+    public static void acknowledge(Path trialDir, String note) {
+        Path finalFile = trialDir.resolve(FINAL);
+        if (!Files.exists(finalFile) || !StateFiles.read(finalFile, AttemptStatus.class).outcome().halting()) {
+            throw new IllegalArgumentException("Only a halted trial can be acknowledged: " + trialDir);
+        }
+        StateFiles.write(trialDir.resolve(ACKNOWLEDGED),
+                Map.of("acknowledged", java.time.Instant.now().toString(), "note", note == null ? "" : note));
+    }
+
+    private static boolean acknowledged(Path trialDir) {
+        return Files.exists(trialDir.resolve(ACKNOWLEDGED));
+    }
+
+    private static String acknowledgeHint(Path trialDir) {
+        return "Inspect " + trialDir + ", reconcile the provider's usage, fix the cause, then run "
+                + "'streamjack-bench acknowledge --trial " + trialDir + "' to continue with the next trial.";
+    }
+
+    private static List<Path> finalsUnder(Path spendRoot) {
+        if (!Files.isDirectory(spendRoot)) {
+            return List.of();
+        }
+        try (Stream<Path> runs = Files.list(spendRoot)) {
+            return runs.filter(Files::isDirectory).sorted()
+                    .flatMap(run -> finals(run.resolve(TRIALS)).stream()).toList();
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 
     private void summarize(Path trialsDir, Manifest manifest, Path spendRoot) {

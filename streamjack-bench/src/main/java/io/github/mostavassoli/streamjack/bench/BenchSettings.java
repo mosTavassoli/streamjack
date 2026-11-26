@@ -45,12 +45,15 @@ public record BenchSettings(
     List<String> differences(BenchSettings other) {
         Map<String, Object> mine = asMap();
         Map<String, Object> theirs = other.asMap();
+        // Compare every key present on either side, so a fingerprint missing from one side also counts as a change.
+        java.util.Set<String> names = new java.util.TreeSet<>(mine.keySet());
+        names.addAll(theirs.keySet());
         List<String> different = new ArrayList<>();
-        mine.forEach((name, value) -> {
-            if (!Objects.equals(value, theirs.get(name))) {
+        for (String name : names) {
+            if (!Objects.equals(mine.get(name), theirs.get(name))) {
                 different.add(name);
             }
-        });
+        }
         return different;
     }
 
