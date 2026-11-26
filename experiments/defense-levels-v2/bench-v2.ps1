@@ -31,7 +31,10 @@ param(
     [int]$MaxTrials = 0,
     [int]$Seed = 20261126,
     # For free end-to-end checks against MockOpenAi.java; loopback addresses only.
-    [string]$OpenAiBaseUrl
+    [string]$OpenAiBaseUrl,
+    # A file outside the repository that contains only the API key, used when OPENAI_API_KEY is not set.
+    # The key is passed to the agent through its environment and never printed or written.
+    [string]$ApiKeyFile = (Join-Path $env:USERPROFILE '.streamjack\openai-api-key.txt')
 )
 $ErrorActionPreference = 'Continue'
 # Lists arrive as one comma-separated string when the script is started with powershell -File.
@@ -56,7 +59,13 @@ if ($OpenAiBaseUrl) {
 } else {
     $endpoint = 'openai'
     Remove-Item Env:OPENAI_BASE_URL -ErrorAction SilentlyContinue
-    if (!$env:OPENAI_API_KEY) { throw 'Set OPENAI_API_KEY in this shell first.' }
+    if (!$env:OPENAI_API_KEY -and (Test-Path $ApiKeyFile)) {
+        if ((Resolve-Path $ApiKeyFile).Path.StartsWith($root, [StringComparison]::OrdinalIgnoreCase)) {
+            throw 'The API key file must be outside the repository.'
+        }
+        $env:OPENAI_API_KEY = (Get-Content $ApiKeyFile -Raw).Trim()
+    }
+    if (!$env:OPENAI_API_KEY) { throw "Set OPENAI_API_KEY, or put the key in $ApiKeyFile." }
 }
 
 $scenarioFiles = @(Get-ChildItem (Join-Path $PSScriptRoot 'scenarios') -Filter '*.yaml' | Sort-Object Name | ForEach-Object FullName) +
