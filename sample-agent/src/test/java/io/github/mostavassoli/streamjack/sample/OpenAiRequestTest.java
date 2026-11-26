@@ -1,6 +1,7 @@
 package io.github.mostavassoli.streamjack.sample;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -59,7 +60,18 @@ class OpenAiRequestTest {
         JsonNode request = json.readTree(captured.body());
         assertThat(request.path("model").asText()).isEqualTo("requested-model");
         assertThat(request.path("max_completion_tokens").asInt()).isEqualTo(1500);
-        assertThat(request.path("response_format").path("type").asText()).isEqualTo("json_schema");
+        // No temperature is sent, so the model's default sampling applies (recorded with the results).
+        assertThat(request.has("temperature")).isFalse();
+        // Strict structured output: every field required, nothing else allowed.
+        JsonNode format = request.path("response_format");
+        assertThat(format.path("type").asText()).isEqualTo("json_schema");
+        assertThat(format.path("json_schema").path("strict").asBoolean()).isTrue();
+        JsonNode schema = format.path("json_schema").path("schema");
+        assertThat(schema.path("additionalProperties").asBoolean(true)).isFalse();
+        assertThat(schema.path("required")).extracting(JsonNode::asText).containsExactlyInAnyOrder(
+                "category", "summary", "draft", "recommendedAction", "followUpRequested");
+        assertThat(schema.path("properties").path("recommendedAction").path("enum"))
+                .extracting(JsonNode::asText).containsExactlyInAnyOrder("DRAFT", "PUBLISH");
         String system = request.path("messages").get(0).path("content").asText();
         String user = request.path("messages").get(1).path("content").asText();
         assertThat(request.path("messages").get(0).path("role").asText()).isEqualTo("system");
@@ -81,6 +93,27 @@ class OpenAiRequestTest {
             assertThat(entry.path("outputTokens").asInt()).isEqualTo(MockOpenAiResource.OUTPUT_TOKENS);
         });
         assertThat(String.join("\n", usage)).doesNotContain("Invoice", "SJ-CANARY");
+    }
+
+    @Test
+    void aFailedRequestIsSentOnceAndLoggedAsAnError() throws Exception {
+        Files.deleteIfExists(USAGE_LOG);
+        MockOpenAiResource.REQUESTS.clear();
+        MockOpenAiResource.failRequests = true;
+        try {
+            TicketCreated ticket = new TicketCreated("T-2", "C-1001", "Question", "Can you help?");
+            assertThatThrownBy(() -> gateway.analyze(
+                    new ModelInput(ticket, customers.findPromptContext("C-1001"), Map.of(), "")))
+                    .isInstanceOf(RuntimeException.class);
+        } finally {
+            MockOpenAiResource.failRequests = false;
+        }
+
+        // The client retries a server error exactly once (max-retries=1 is the lowest allowed value). The usage log
+        // records the final failure, so the harness counts the attempt at its worst-case cost.
+        assertThat(MockOpenAiResource.REQUESTS).hasSize(2);
+        assertThat(Files.readAllLines(USAGE_LOG)).singleElement()
+                .satisfies(line -> assertThat(json.readTree(line).path("outcome").asText()).isEqualTo("error"));
     }
 
     public static final class Profile implements QuarkusTestProfile {

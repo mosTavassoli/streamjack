@@ -20,6 +20,8 @@ public final class MockOpenAiResource implements QuarkusTestResourceLifecycleMan
     }
 
     static final List<Captured> REQUESTS = new CopyOnWriteArrayList<>();
+    /** When set, every request fails with HTTP 500, to check that the client does not retry. */
+    static volatile boolean failRequests;
     static final String SERVED_MODEL = "mock-served-model";
     static final int INPUT_TOKENS = 123;
     static final int OUTPUT_TOKENS = 45;
@@ -43,6 +45,15 @@ public final class MockOpenAiResource implements QuarkusTestResourceLifecycleMan
                 body = new String(in.readAllBytes(), StandardCharsets.UTF_8);
             }
             REQUESTS.add(new Captured(exchange.getRequestHeaders().getFirst("Authorization"), body));
+            if (failRequests) {
+                byte[] error = "{\"error\":{\"message\":\"mock failure\",\"type\":\"server_error\"}}"
+                        .getBytes(StandardCharsets.UTF_8);
+                exchange.getResponseHeaders().add("Content-Type", "application/json");
+                exchange.sendResponseHeaders(500, error.length);
+                exchange.getResponseBody().write(error);
+                exchange.close();
+                return;
+            }
             String response = """
                     {"id":"chatcmpl-test","object":"chat.completion","created":1,"model":"%s",
                      "choices":[{"index":0,"message":{"role":"assistant","content":%s},"finish_reason":"stop"}],

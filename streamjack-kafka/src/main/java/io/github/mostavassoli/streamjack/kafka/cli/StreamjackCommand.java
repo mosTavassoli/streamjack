@@ -8,6 +8,7 @@ import io.github.mostavassoli.streamjack.core.report.ReportWriter;
 import io.github.mostavassoli.streamjack.core.report.RunReport;
 import io.github.mostavassoli.streamjack.core.scenario.Scenario;
 import io.github.mostavassoli.streamjack.core.scenario.ScenarioLoader;
+import io.github.mostavassoli.streamjack.kafka.EvidenceWriter;
 import io.github.mostavassoli.streamjack.kafka.KafkaScenarioRunner;
 import io.github.mostavassoli.streamjack.kafka.RunnerConfiguration;
 import io.github.mostavassoli.streamjack.kafka.ScenarioExecution;
@@ -89,6 +90,11 @@ final class StreamjackCommand implements Callable<Integer> {
             description = "Optional Java properties file for Kafka TLS/SASL client settings")
     private Path kafkaProperties;
 
+    @Option(
+            names = "--evidence-dir",
+            description = "Optional directory for raw evidence per scenario (agent output; synthetic test data only)")
+    private Path evidenceDir;
+
     @Override
     public Integer call() {
         PrintWriter out = spec.commandLine().getOut();
@@ -112,6 +118,9 @@ final class StreamjackCommand implements Callable<Integer> {
             for (Scenario scenario : loaded) {
                 ScenarioExecution execution = runner.run(scenario);
                 results.add(execution.result());
+                if (evidenceDir != null) {
+                    new EvidenceWriter().write(execution, evidenceDir);
+                }
                 print(out, execution);
             }
             RunReport runReport = RunReport.of(agent, results);

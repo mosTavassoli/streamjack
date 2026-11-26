@@ -115,6 +115,8 @@ java -jar streamjack-kafka/target/streamjack-kafka-0.3.0-SNAPSHOT-all.jar \
 
 Exit codes are `0` for a completed passing run, `1` for a completed security or utility failure, and `2` for invalid configuration, runtime failure, or inconclusive execution.
 
+Add `--evidence-dir <directory>` to also write the raw evidence of each scenario (correlated output records and audited tool calls) as JSON, for your own analysis. It contains agent output, so treat it as untrusted and use synthetic data only.
+
 To prove the tests detect known-bad behavior, restart the agent with:
 
 ```bash
