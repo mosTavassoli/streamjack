@@ -44,6 +44,9 @@ public final class BenchRun {
     public static final int PROVIDER_ERROR = 5;
     public static final int INCOMPLETE = 6;
 
+    /** Upper bound for attempts per trial and invocation; only setup failures, which send nothing, use more than one. */
+    public static final int MAX_ATTEMPTS = 10;
+
     /**
      * @param repository the repository root; scenario paths are stored relative to it, so a moved checkout or another
      *                   OS resumes the same plan
@@ -63,9 +66,10 @@ public final class BenchRun {
             repository = repository.toAbsolutePath().normalize();
             scenarioFiles = List.copyOf(scenarioFiles);
             if (out.getParent() == null || out.getParent().getParent() == null
-                    || !Double.isFinite(costLimit) || costLimit <= 0 || maxAttempts < 1 || maxTrials < 0) {
+                    || !Double.isFinite(costLimit) || costLimit <= 0 || maxAttempts < 1
+                    || maxAttempts > MAX_ATTEMPTS || maxTrials < 0) {
                 throw new IllegalArgumentException("Use a run directory under a dedicated spend directory, "
-                        + "a finite positive cost limit, at least one attempt and a nonnegative trial limit.");
+                        + "a finite positive cost limit, 1 to " + MAX_ATTEMPTS + " attempts and a nonnegative trial limit.");
             }
         }
     }
@@ -127,6 +131,12 @@ public final class BenchRun {
                 AttemptStatus last = null;
                 int lastNumber = 0;
                 for (Path attempt : attempts) {
+                    if (last != null && !last.outcome().retryable()) {
+                        // The harness never dispatches after a final outcome, so this history is inconsistent: a later
+                        // attempt must not hide the earlier result (for example an unknown or billed attempt).
+                        return stop(trialDir, trial, lastNumber, attempt.getFileName() + " follows a final outcome ("
+                                + last.outcome().wire() + ") of attempt " + lastNumber, last);
+                    }
                     Path statusFile = attempt.resolve(STATUS);
                     if (!Files.exists(statusFile)) {
                         // Interrupted while running: it may have been billed, so it is final.
@@ -139,9 +149,6 @@ public final class BenchRun {
                     String problem = Usage.problem(options.settings().model(), trial, last, Usage.read(attempt));
                     if (problem != null) {
                         return stop(trialDir, trial, lastNumber, problem, last);
-                    }
-                    if (last.outcome() == Outcome.COMPLETED) {
-                        break;
                     }
                 }
                 AttemptStatus decided = null;

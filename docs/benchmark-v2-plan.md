@@ -127,8 +127,8 @@ no effect was detected at this sample size, not that the model or prompt is safe
 
 ## Execution
 
-The Java harness is in `streamjack-bench`. The existing Windows-only v2 scripts are the prototype and are not used
-for paid runs. Their run directories are not interchangeable with the Java harness.
+The Java harness is in `streamjack-bench`. A Windows-only PowerShell prototype was never used for paid runs and was
+removed after the confirmation runs; it remains in the git history before commit `842e778`.
 
 From the repository root, with Java 21, Maven and Docker running Linux containers:
 

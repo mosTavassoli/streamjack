@@ -92,8 +92,8 @@ public final class Bench {
         public Integer call() throws IOException {
             PrintWriter log = spec.commandLine().getOut();
             try {
-                if (maxAttempts < 1) {
-                    throw new IllegalArgumentException("--max-attempts must be at least 1");
+                if (maxAttempts < 1 || maxAttempts > BenchRun.MAX_ATTEMPTS) {
+                    throw new IllegalArgumentException("--max-attempts must be between 1 and " + BenchRun.MAX_ATTEMPTS);
                 }
                 Path repository = Path.of("").toAbsolutePath();
                 List<Path> scenarioFiles = Setup.scenarioFiles(repository, scenarioFilter);

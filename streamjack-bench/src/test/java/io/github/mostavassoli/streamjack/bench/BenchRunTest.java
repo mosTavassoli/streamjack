@@ -195,6 +195,48 @@ class BenchRunTest {
     }
 
     @Test
+    void anAttemptAfterAFinalOutcomeStopsTheRunInsteadOfHidingIt() throws Exception {
+        BenchRun.Options options = options("inconsistent", 2, 3);
+        assertThat(run(options, (trial, dir) -> AttemptStatus.of(Outcome.UNKNOWN, "interrupted", trial.events())))
+                .isEqualTo(BenchRun.INCOMPLETE);
+        Path first = firstTrial(options);
+        // Tampered or inconsistent history: a later setup failure after the final unknown attempt.
+        Files.delete(first.resolve(BenchRun.FINAL));
+        Files.createDirectories(first.resolve(BenchRun.ATTEMPT_PREFIX + 2));
+        StateFiles.write(first.resolve(BenchRun.ATTEMPT_PREFIX + 2).resolve(BenchRun.STATUS),
+                AttemptStatus.of(Outcome.SETUP_FAILED, "harness error", 2));
+
+        assertThat(run(options, rejectDispatch())).isEqualTo(BenchRun.STOPPED);
+        assertThat(finalStatus(first).outcome()).isEqualTo(Outcome.STOPPED);
+        assertThat(finalStatus(first).reason()).contains("attempt-2 follows a final outcome (unknown) of attempt 1");
+    }
+
+    @Test
+    void attemptsPerTrialAreBounded() {
+        assertThatThrownBy(() -> options("too-many", 1, BenchRun.MAX_ATTEMPTS + 1))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(options("enough", 1, BenchRun.MAX_ATTEMPTS).maxAttempts()).isEqualTo(BenchRun.MAX_ATTEMPTS);
+    }
+
+    @Test
+    void aStopIsSavedBeforeAnUnreadableUsageLogFailsTheRun() throws Exception {
+        BenchRun.Options options = options("unreadable-usage", 1, 1);
+        // A directory where the usage file belongs makes reading it fail with an I/O error.
+        assertThatThrownBy(() -> run(options, (trial, dir) -> {
+            try {
+                Files.createDirectories(dir.resolve(Usage.FILE));
+            } catch (java.io.IOException e) {
+                throw new java.io.UncheckedIOException(e);
+            }
+            return AttemptStatus.of(Outcome.STOPPED, "the agent process (pid 7) did not exit", trial.events());
+        })).isInstanceOf(java.io.UncheckedIOException.class);
+        AttemptStatus saved = StateFiles.read(
+                firstTrial(options).resolve(BenchRun.ATTEMPT_PREFIX + 1).resolve(BenchRun.STATUS), AttemptStatus.class);
+        assertThat(saved.outcome()).isEqualTo(Outcome.STOPPED);
+        assertThat(saved.reason()).contains("pid 7");
+    }
+
+    @Test
     void loggedRateLimitsHaltEvenWhenTheAttemptCrashedBeforeItsStatus() {
         BenchRun.Options options = options("crash-429", 2, 3);
         String limit = "{\"outcome\":\"error\",\"error\":\"dev.langchain4j.exception.RateLimitException\"}\n";
