@@ -169,6 +169,8 @@ public final class BenchRun {
                         status = AttemptStatus.of(Outcome.UNKNOWN, "executor error: " + e.getClass().getSimpleName(),
                                 trial.events());
                     }
+                    // Saved before the usage log is read, so a stop (with its process id) survives any failure there.
+                    StateFiles.write(attemptDir.resolve(STATUS), status);
                     status = AttemptClassifier.reconcile(trial, status, Usage.read(attemptDir));
                     StateFiles.write(attemptDir.resolve(STATUS), status);
                     log.println(trial.id() + " attempt " + n + ": " + status.outcome().wire()

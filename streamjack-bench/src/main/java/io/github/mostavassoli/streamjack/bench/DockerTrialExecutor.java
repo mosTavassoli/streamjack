@@ -198,7 +198,7 @@ public final class DockerTrialExecutor implements TrialExecutor {
     }
 
     /** Stops the agent and returns whether it has exited (only then is its usage log complete). */
-    private static boolean stopAgent(Process process) {
+    static boolean stopAgent(Process process) {
         try {
             process.destroy();
             if (!process.waitFor(30, TimeUnit.SECONDS)) {
@@ -207,7 +207,11 @@ public final class DockerTrialExecutor implements TrialExecutor {
             return true;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            process.destroyForcibly();
+            try {
+                process.destroyForcibly();
+            } catch (RuntimeException ignored) {
+                // Still unconfirmed either way.
+            }
             return false;
         } catch (RuntimeException e) {
             // Termination itself failed: treat it as an unconfirmed exit.

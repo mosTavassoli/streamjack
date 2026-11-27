@@ -45,7 +45,9 @@ final class Usage {
         }
         try {
             List<Entry> entries = new ArrayList<>();
-            for (String line : Files.readAllLines(file)) {
+            // Decoded leniently: a line cut inside a multi-byte character becomes an unreadable line, not a failure.
+            String content = new String(Files.readAllBytes(file), java.nio.charset.StandardCharsets.UTF_8);
+            for (String line : content.split("\\R")) {
                 if (line.isBlank()) {
                     continue;
                 }

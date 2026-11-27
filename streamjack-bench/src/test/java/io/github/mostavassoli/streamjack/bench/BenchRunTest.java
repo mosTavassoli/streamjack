@@ -210,6 +210,43 @@ class BenchRunTest {
     }
 
     @Test
+    void aStopWithAnUndecodableUsageLogKeepsItsProcessIdAndHalts() {
+        BenchRun.Options options = options("stop-bad-bytes", 2, 3);
+        assertThat(run(options, (trial, dir) -> {
+            try {
+                // A line cut inside a multi-byte character.
+                Files.write(dir.resolve(Usage.FILE), new byte[] {'{', '"', 'a', '"', ':', '"', (byte) 0xE2, (byte) 0x82});
+            } catch (java.io.IOException e) {
+                throw new java.io.UncheckedIOException(e);
+            }
+            return AttemptStatus.of(Outcome.STOPPED, "the agent process (pid 7) did not exit", trial.events());
+        })).isEqualTo(BenchRun.STOPPED);
+        assertThat(finalStatus(firstTrial(options)).outcome()).isEqualTo(Outcome.STOPPED);
+        assertThat(finalStatus(firstTrial(options)).reason()).contains("pid 7");
+    }
+
+    @Test
+    void anInterruptedStopWhoseForcedKillFailsIsUnconfirmed() {
+        Process stubborn = new Process() {
+            @Override public java.io.OutputStream getOutputStream() { return java.io.OutputStream.nullOutputStream(); }
+            @Override public java.io.InputStream getInputStream() { return java.io.InputStream.nullInputStream(); }
+            @Override public java.io.InputStream getErrorStream() { return java.io.InputStream.nullInputStream(); }
+            @Override public int waitFor() throws InterruptedException { throw new InterruptedException(); }
+            @Override public boolean waitFor(long timeout, java.util.concurrent.TimeUnit unit) throws InterruptedException {
+                throw new InterruptedException();
+            }
+            @Override public int exitValue() { throw new IllegalThreadStateException(); }
+            @Override public void destroy() { }
+            @Override public Process destroyForcibly() { throw new IllegalStateException("cannot kill"); }
+        };
+        try {
+            assertThat(DockerTrialExecutor.stopAgent(stubborn)).isFalse();
+        } finally {
+            Thread.interrupted();
+        }
+    }
+
+    @Test
     void anUnreadableUsageLineHaltsInsteadOfFailingTheRun() {
         BenchRun.Options options = options("cut-line", 2, 3);
         assertThat(run(options, (trial, dir) -> {
