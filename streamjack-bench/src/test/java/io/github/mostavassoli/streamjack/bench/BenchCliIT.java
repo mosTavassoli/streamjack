@@ -44,8 +44,8 @@ class BenchCliIT {
             assertThat(mock.unexpectedAuthorization()).as("only the dummy key reaches the mock").isZero();
             // The packaged output cap applies; the poisoned override (5) did not reach the agent.
             assertThat(StateFiles.JSON.readTree(mock.lastRequest()).path("max_completion_tokens").asInt()).isEqualTo(1500);
-            // The real-looking key from the environment appears in no file the run wrote.
-            try (Stream<Path> files = Files.walk(run)) {
+            // The real-looking key from the environment appears in no file the run wrote, nor in the CLI's own output.
+            try (Stream<Path> files = Files.walk(work)) {
                 for (Path file : files.filter(Files::isRegularFile).toList()) {
                     assertThat(Files.readString(file, StandardCharsets.ISO_8859_1)).as(file.toString())
                             .doesNotContain(SENTINEL_KEY);

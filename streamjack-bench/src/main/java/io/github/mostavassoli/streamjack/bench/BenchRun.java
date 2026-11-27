@@ -138,7 +138,7 @@ public final class BenchRun {
                     lastNumber = number(attempt);
                     String problem = Usage.problem(options.settings().model(), trial, last, Usage.read(attempt));
                     if (problem != null) {
-                        return stop(trialDir, trial, lastNumber, problem);
+                        return stop(trialDir, trial, lastNumber, problem, last);
                     }
                     if (last.outcome() == Outcome.COMPLETED) {
                         break;
@@ -175,7 +175,7 @@ public final class BenchRun {
                             + (status.reason().isEmpty() ? "" : " (" + status.reason() + ")"));
                     String problem = Usage.problem(options.settings().model(), trial, status, Usage.read(attemptDir));
                     if (problem != null) {
-                        return stop(trialDir, trial, n, problem);
+                        return stop(trialDir, trial, n, problem, status);
                     }
                     last = status;
                     lastNumber = n;
@@ -231,7 +231,9 @@ public final class BenchRun {
         return planned;
     }
 
-    private int stop(Path trialDir, Trial trial, int attempt, String problem) {
+    private int stop(Path trialDir, Trial trial, int attempt, String usageProblem, AttemptStatus status) {
+        // Keep an earlier stop's reason (for example the process id of an agent that did not exit).
+        String problem = status.outcome() == Outcome.STOPPED ? usageProblem + "; " + status.reason() : usageProblem;
         StateFiles.write(trialDir.resolve(FINAL),
                 new AttemptStatus(Outcome.STOPPED, problem, trial.events(), attempt, null, null));
         log.println("Stopping the run: " + problem + ". " + acknowledgeHint(trialDir));

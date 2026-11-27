@@ -49,7 +49,14 @@ final class Usage {
                 if (line.isBlank()) {
                     continue;
                 }
-                JsonNode node = StateFiles.JSON.readTree(line);
+                JsonNode node;
+                try {
+                    node = StateFiles.JSON.readTree(line);
+                } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+                    // For example a line cut off when the agent was killed: an unaccounted call, which halts the run.
+                    entries.add(new Entry("error", null, null, null, null, "unreadable usage line"));
+                    continue;
+                }
                 entries.add(new Entry(text(node, "outcome"), text(node, "model"), number(node, "inputTokens"),
                         number(node, "outputTokens"), text(node, "finishReason"), text(node, "error")));
             }

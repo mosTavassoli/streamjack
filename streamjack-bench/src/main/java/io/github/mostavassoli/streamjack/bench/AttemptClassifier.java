@@ -59,21 +59,29 @@ final class AttemptClassifier {
 
     /**
      * Checks a status, fresh or recovered from an earlier invocation, against the usage log, the single source for
-     * what was sent: a logged provider error always halts the run, a setup failure must have sent nothing, a rate limit
-     * must cover every expected call, and anything else stays as recorded.
+     * what was sent. A stop (with its process id) is kept; otherwise any logged error, including a rate limit, halts
+     * the run, even when the attempt was interrupted before its status was written. A setup failure must have sent
+     * nothing, and anything else stays as recorded.
      */
     static AttemptStatus reconcile(Trial trial, AttemptStatus status, List<Usage.Entry> usage) {
-        List<String> providerErrors = usage.stream()
-                .filter(entry -> "error".equals(entry.outcome()) && !rateLimit(entry))
+        if (status.outcome() == Outcome.STOPPED) {
+            return status;
+        }
+        List<String> errors = usage.stream().filter(entry -> "error".equals(entry.outcome()))
                 .map(entry -> String.valueOf(entry.error())).distinct().sorted().toList();
-        if (!providerErrors.isEmpty() && status.outcome() != Outcome.PROVIDER_ERROR) {
-            return withOutcome(status, Outcome.PROVIDER_ERROR, String.join(" ", providerErrors));
+        if (allCallsRateLimited(trial, usage)) {
+            return status.outcome() == Outcome.RATE_LIMITED ? status
+                    : withOutcome(status, Outcome.RATE_LIMITED, "provider rate limit");
+        }
+        if (!errors.isEmpty()) {
+            return status.outcome() == Outcome.PROVIDER_ERROR ? status
+                    : withOutcome(status, Outcome.PROVIDER_ERROR, String.join(" ", errors));
+        }
+        if (status.outcome() == Outcome.RATE_LIMITED) {
+            return withOutcome(status, Outcome.PROVIDER_ERROR, "rate limit that the usage log does not show");
         }
         if (status.outcome() == Outcome.SETUP_FAILED && !usage.isEmpty()) {
             return withOutcome(status, Outcome.UNKNOWN, "setup reported a failure after model calls were logged");
-        }
-        if (status.outcome() == Outcome.RATE_LIMITED && !allCallsRateLimited(trial, usage)) {
-            return withOutcome(status, Outcome.UNKNOWN, "rate limit with calls that may have been processed");
         }
         return status;
     }

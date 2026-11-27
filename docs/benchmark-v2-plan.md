@@ -123,7 +123,9 @@ guarantee on the provider bill.
   select for well-behaved answers and cannot repeat a billed request.
 - After every attempt, the served model and the number of model calls are checked; a mismatch stops the run.
 - A provider error (key, model access, unsupported request, server error), a rate limit, a failed usage check, or an
-  agent process that does not confirm its exit halts the run. A halt in any run blocks every run that shares the spend
+  agent process that does not confirm its exit halts the run. Any error in the agent's usage log (including an
+  unreadable line) counts, even if the attempt was interrupted before its status was written. An unknown or failed
+  outcome without a logged error is final but does not halt. A halt in any run blocks every run that shares the spend
   directory, and so does another run's unfinished trial (attempts without a final result) until that run is resumed.
   After inspecting a halted attempt and reconciling the provider's usage, run
   `streamjack-bench acknowledge --trial <trial directory>`; the halted trial is never replayed, and the run continues

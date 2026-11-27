@@ -135,16 +135,18 @@ class BenchRunTest {
 
     @Test
     void partialRateLimitIsNotRetriedAndProviderErrorsAreNeverLost() throws Exception {
-        // One of two calls rate-limited, the other unaccounted for: it may have been processed, so no replay.
+        // One of two calls rate-limited, the other unaccounted for: it may have been processed, so no replay, and the
+        // logged error halts the run.
         BenchRun.Options options = options("partial", 1, 3);
         AtomicInteger dispatches = new AtomicInteger();
         assertThat(run(options, (trial, dir) -> {
             dispatches.incrementAndGet();
             write(dir, "{\"outcome\":\"error\",\"error\":\"dev.langchain4j.exception.RateLimitException\"}\n");
             return AttemptStatus.of(Outcome.RATE_LIMITED, "provider rate limit", trial.events());
-        })).isEqualTo(BenchRun.INCOMPLETE);
+        })).isEqualTo(BenchRun.PROVIDER_ERROR);
         assertThat(dispatches.get()).isEqualTo(1);
-        assertThat(finalStatus(firstTrial(options)).outcome()).isEqualTo(Outcome.UNKNOWN);
+        assertThat(finalStatus(firstTrial(options)).outcome()).isEqualTo(Outcome.PROVIDER_ERROR);
+        BenchRun.acknowledge(firstTrial(options), "checked provider usage");
 
         // An executor that logs a provider error and then throws: the error still halts the run.
         BenchRun.Options thrown = options("thrown", 1, 3);
@@ -168,6 +170,53 @@ class BenchRunTest {
         assertThat(dispatches.get()).isEqualTo(1);
         assertThat(finalStatus(firstTrial(options)).outcome()).isEqualTo(Outcome.RATE_LIMITED);
         assertThat(run(options, rejectDispatch())).isEqualTo(BenchRun.STOPPED);
+    }
+
+    @Test
+    void loggedRateLimitsHaltEvenWhenTheAttemptCrashedBeforeItsStatus() {
+        BenchRun.Options options = options("crash-429", 2, 3);
+        String limit = "{\"outcome\":\"error\",\"error\":\"dev.langchain4j.exception.RateLimitException\"}\n";
+        // The harness dies after the agent logged its 429s but before the attempt's status was written.
+        assertThatThrownBy(() -> run(options, (trial, dir) -> {
+            write(dir, limit.repeat(trial.events()));
+            throw new Error("simulated crash");
+        })).isInstanceOf(Error.class);
+        // Resuming recovers the attempt as a rate limit, halts, and never dispatches the second trial.
+        assertThat(run(options, rejectDispatch())).isEqualTo(BenchRun.PROVIDER_ERROR);
+        assertThat(finalStatus(firstTrial(options)).outcome()).isEqualTo(Outcome.RATE_LIMITED);
+    }
+
+    @Test
+    void aLoggedErrorHaltsWhenTheExecutorFailsAfterIt() {
+        BenchRun.Options options = options("executor-error", 2, 3);
+        AtomicInteger dispatches = new AtomicInteger();
+        assertThat(run(options, (trial, dir) -> {
+            dispatches.incrementAndGet();
+            write(dir, "{\"outcome\":\"error\",\"error\":\"dev.langchain4j.exception.RateLimitException\"}\n");
+            throw new IllegalStateException("report writing failed");
+        })).isEqualTo(BenchRun.PROVIDER_ERROR);
+        assertThat(dispatches.get()).isEqualTo(1);
+        assertThat(finalStatus(firstTrial(options)).outcome()).isEqualTo(Outcome.PROVIDER_ERROR);
+    }
+
+    @Test
+    void aStopKeepsItsProcessIdOverALoggedError() {
+        Trial trial = Manifest.plan(REPOSITORY, List.of(SCENARIO), List.of("NEUTRAL"), 1, 42).trials().getFirst();
+        AttemptStatus stopped = AttemptStatus.of(Outcome.STOPPED, "the agent process (pid 7) did not exit", trial.events());
+        AttemptStatus reconciled = AttemptClassifier.reconcile(trial, stopped,
+                List.of(new Usage.Entry("error", null, null, null, null, "ServerError")));
+        assertThat(reconciled.outcome()).isEqualTo(Outcome.STOPPED);
+        assertThat(reconciled.reason()).contains("pid 7");
+    }
+
+    @Test
+    void anUnreadableUsageLineHaltsInsteadOfFailingTheRun() {
+        BenchRun.Options options = options("cut-line", 2, 3);
+        assertThat(run(options, (trial, dir) -> {
+            write(dir, "{\"outcome\":\"response\",\"model\":\"" + MODEL + "\",\"inputTo");
+            return AttemptStatus.of(Outcome.UNKNOWN, "harness error", trial.events());
+        })).isEqualTo(BenchRun.PROVIDER_ERROR);
+        assertThat(finalStatus(firstTrial(options)).reason()).contains("unreadable usage line");
     }
 
     @Test
