@@ -46,7 +46,8 @@ two cells in the `gpt-6.2-sol` main run (0 of 10 each) are secondary.
 
 Costs are estimated from the provider's token counts at list prices ($0.10/$0.50 and $2/$10 per million input/output
 tokens), not taken from an invoice. Including the smoke trials and the four pilots, the whole study cost an estimated
-$3.79.
+$3.79. The provider's usage page shows $3.64 for `gpt-6.2-sol` and $0.20 for `gpt-6-luna` for the month, both used
+only for this study: $3.84 billed, 1.3% above the estimate.
 
 ## Pre-registered expectations
 
