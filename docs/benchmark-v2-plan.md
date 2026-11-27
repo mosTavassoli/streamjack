@@ -163,7 +163,9 @@ guarantee on the provider bill.
 - A fresh Kafka broker and agent process for every trial; state is kept between the events of one scenario only.
 - The OpenAI client retries a failed request (server error, rate limit, timeout) once; it cannot be set lower. Failed
   requests are generally not billed, and any attempt with a model error counts at the worst-case trial cost.
-- Only an attempt that provably sent no request (the broker or agent did not start) is retried by the harness.
+- Only an attempt that provably sent no request (the broker or agent did not start) is retried by the harness. If a
+  trial uses up `--max-attempts` this way (for example, Docker stopped while the computer slept), the run stops and
+  leaves that trial open; running the same command again resumes it with a fresh set of attempts.
   Invalid model output, provider errors, rate limits, and interrupted attempts are final results, so retries cannot
   select for well-behaved answers and cannot repeat a billed request.
 - After every attempt, the served model and the number of model calls are checked; a mismatch stops the run.
@@ -177,8 +179,8 @@ guarantee on the provider bill.
   with the next trial.
 - The agent process starts with an allowlist of operating-system variables plus the harness's own settings, so no
   other configuration (for example a Quarkus profile variable that changes the endpoint) can reach it.
-- Exit codes: 0 every trial of the invocation completed, 3 cost limit, 4 stopped (usage check, agent exit, or a halted
-  or unfinished run), 5 provider error or rate limit, 6 some trials ended without completing.
+- Exit codes: 0 every trial of the invocation completed, 3 cost limit, 4 stopped (usage check, agent exit, a halted
+  or unfinished run, or a trial that could not be set up), 5 provider error or rate limit, 6 some trials ended without completing.
 - The OpenAI API is pinned to Chat Completions, so the real endpoint receives the same request the mock tests check.
 - JUnit checks cover recovery on both sides of a status write, wrong served models, missing usage, HTTP 429 and 500
   responses, the spend guard and changed settings.

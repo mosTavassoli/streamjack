@@ -173,6 +173,28 @@ class BenchRunTest {
     }
 
     @Test
+    void repeatedSetupFailuresStopTheRunAndLeaveTheTrialOpenForResume() throws Exception {
+        BenchRun.Options options = options("docker-down", 2, 3);
+        AtomicInteger setups = new AtomicInteger();
+        // Docker is down: every attempt fails before the scenario starts.
+        assertThat(run(options, (trial, dir) -> {
+            setups.incrementAndGet();
+            return AttemptStatus.of(Outcome.SETUP_FAILED, "harness error: ContainerLaunchException", trial.events());
+        })).isEqualTo(BenchRun.STOPPED);
+        assertThat(setups.get()).as("three attempts on the first trial, none on the second").isEqualTo(3);
+        Path first = firstTrial(options);
+        assertThat(first.resolve(BenchRun.FINAL)).doesNotExist();
+        assertThat(Spend.total(options.out().getParent())).isZero();
+
+        // Docker is back: the same command resumes and completes both trials.
+        AtomicInteger calls = new AtomicInteger();
+        assertThat(run(options, successful(calls, MODEL, true))).isZero();
+        assertThat(finalStatus(first).outcome()).isEqualTo(Outcome.COMPLETED);
+        assertThat(finalStatus(first).attempt()).isEqualTo(4);
+        assertThat(calls.get()).isEqualTo(2 * 2);
+    }
+
+    @Test
     void loggedRateLimitsHaltEvenWhenTheAttemptCrashedBeforeItsStatus() {
         BenchRun.Options options = options("crash-429", 2, 3);
         String limit = "{\"outcome\":\"error\",\"error\":\"dev.langchain4j.exception.RateLimitException\"}\n";

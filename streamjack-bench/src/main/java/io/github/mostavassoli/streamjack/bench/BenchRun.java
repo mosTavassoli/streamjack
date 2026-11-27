@@ -152,7 +152,10 @@ public final class BenchRun {
                     log.println("Stopping after " + options.maxTrials() + " trial(s) as requested. Run again to continue.");
                     break;
                 }
-                for (int n = attempts.size() + 1; decided == null && n <= options.maxAttempts(); n++) {
+                // The attempt limit applies per invocation: only setup failures (which sent nothing) accumulate across
+                // invocations, so a resumed run may try a trial again after, for example, Docker was restarted.
+                int lastAllowed = attempts.size() + options.maxAttempts();
+                for (int n = attempts.size() + 1; decided == null && n <= lastAllowed; n++) {
                     double spend = Spend.total(spendRoot);
                     if (spend + options.settings().trialCostReserve() > options.costLimit()) {
                         log.printf(Locale.ROOT, "Stopping: spend so far $%.4f plus the trial reserve would exceed the "
@@ -186,7 +189,13 @@ public final class BenchRun {
                     }
                 }
                 if (decided == null) {
-                    decided = last.asFinal(lastNumber);
+                    // Every attempt failed before the scenario started (for example, Docker stopped while the computer
+                    // slept). Nothing was sent, so the trial is left open instead of recorded as failed: continuing
+                    // would only fail every remaining trial the same way.
+                    log.println("Stopping: " + trial.id() + " could not be set up in " + options.maxAttempts()
+                            + " attempt(s) (" + last.reason() + "). No request was sent. Check Docker, then run the "
+                            + "same command again to resume.");
+                    return STOPPED;
                 }
                 StateFiles.write(trialDir.resolve(FINAL), decided);
                 ran++;
