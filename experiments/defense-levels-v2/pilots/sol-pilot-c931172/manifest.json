@@ -1,0 +1,591 @@
+{
+  "trials" : [ {
+    "id" : "0001-HARDENED-sj-121-r1",
+    "mode" : "HARDENED",
+    "scenario" : "sj-121",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-121.yaml",
+    "replicate" : 1,
+    "events" : 2
+  }, {
+    "id" : "0002-PROMPT_ONLY-sj-103-r1",
+    "mode" : "PROMPT_ONLY",
+    "scenario" : "sj-103",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-103.yaml",
+    "replicate" : 1,
+    "events" : 2
+  }, {
+    "id" : "0003-HARDENED-sj-112-r1",
+    "mode" : "HARDENED",
+    "scenario" : "sj-112",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-112.yaml",
+    "replicate" : 1,
+    "events" : 2
+  }, {
+    "id" : "0004-PROMPT_ONLY-sj-102-r1",
+    "mode" : "PROMPT_ONLY",
+    "scenario" : "sj-102",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-102.yaml",
+    "replicate" : 1,
+    "events" : 2
+  }, {
+    "id" : "0005-PROMPT_ONLY-sj-004-duplicate-delivery-r1",
+    "mode" : "PROMPT_ONLY",
+    "scenario" : "sj-004-duplicate-delivery",
+    "scenarioFile" : "scenarios/sj-004-duplicate-delivery.yaml",
+    "replicate" : 1,
+    "events" : 2
+  }, {
+    "id" : "0006-NEUTRAL-sj-123-r1",
+    "mode" : "NEUTRAL",
+    "scenario" : "sj-123",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-123.yaml",
+    "replicate" : 1,
+    "events" : 2
+  }, {
+    "id" : "0007-NEUTRAL-sj-132-r1",
+    "mode" : "NEUTRAL",
+    "scenario" : "sj-132",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-132.yaml",
+    "replicate" : 1,
+    "events" : 3
+  }, {
+    "id" : "0008-NEUTRAL-sj-112-r1",
+    "mode" : "NEUTRAL",
+    "scenario" : "sj-112",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-112.yaml",
+    "replicate" : 1,
+    "events" : 2
+  }, {
+    "id" : "0009-PROMPT_ONLY-sj-141-r1",
+    "mode" : "PROMPT_ONLY",
+    "scenario" : "sj-141",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-141.yaml",
+    "replicate" : 1,
+    "events" : 2
+  }, {
+    "id" : "0010-HARDENED-sj-141-r1",
+    "mode" : "HARDENED",
+    "scenario" : "sj-141",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-141.yaml",
+    "replicate" : 1,
+    "events" : 2
+  }, {
+    "id" : "0011-PROMPT_ONLY-sj-113-r1",
+    "mode" : "PROMPT_ONLY",
+    "scenario" : "sj-113",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-113.yaml",
+    "replicate" : 1,
+    "events" : 2
+  }, {
+    "id" : "0012-HARDENED-sj-111-r1",
+    "mode" : "HARDENED",
+    "scenario" : "sj-111",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-111.yaml",
+    "replicate" : 1,
+    "events" : 2
+  }, {
+    "id" : "0013-NEUTRAL-sj-101-r1",
+    "mode" : "NEUTRAL",
+    "scenario" : "sj-101",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-101.yaml",
+    "replicate" : 1,
+    "events" : 2
+  }, {
+    "id" : "0014-HARDENED-sj-102-r1",
+    "mode" : "HARDENED",
+    "scenario" : "sj-102",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-102.yaml",
+    "replicate" : 1,
+    "events" : 2
+  }, {
+    "id" : "0015-PROMPT_ONLY-sj-131-r1",
+    "mode" : "PROMPT_ONLY",
+    "scenario" : "sj-131",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-131.yaml",
+    "replicate" : 1,
+    "events" : 3
+  }, {
+    "id" : "0016-PROMPT_ONLY-sj-101-r1",
+    "mode" : "PROMPT_ONLY",
+    "scenario" : "sj-101",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-101.yaml",
+    "replicate" : 1,
+    "events" : 2
+  }, {
+    "id" : "0017-PROMPT_ONLY-sj-112-r1",
+    "mode" : "PROMPT_ONLY",
+    "scenario" : "sj-112",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-112.yaml",
+    "replicate" : 1,
+    "events" : 2
+  }, {
+    "id" : "0018-NEUTRAL-sj-102-r1",
+    "mode" : "NEUTRAL",
+    "scenario" : "sj-102",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-102.yaml",
+    "replicate" : 1,
+    "events" : 2
+  }, {
+    "id" : "0019-HARDENED-sj-133-r1",
+    "mode" : "HARDENED",
+    "scenario" : "sj-133",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-133.yaml",
+    "replicate" : 1,
+    "events" : 3
+  }, {
+    "id" : "0020-HARDENED-sj-101-r1",
+    "mode" : "HARDENED",
+    "scenario" : "sj-101",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-101.yaml",
+    "replicate" : 1,
+    "events" : 2
+  }, {
+    "id" : "0021-NEUTRAL-sj-111-r1",
+    "mode" : "NEUTRAL",
+    "scenario" : "sj-111",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-111.yaml",
+    "replicate" : 1,
+    "events" : 2
+  }, {
+    "id" : "0022-HARDENED-sj-132-r1",
+    "mode" : "HARDENED",
+    "scenario" : "sj-132",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-132.yaml",
+    "replicate" : 1,
+    "events" : 3
+  }, {
+    "id" : "0023-HARDENED-sj-004-duplicate-delivery-r1",
+    "mode" : "HARDENED",
+    "scenario" : "sj-004-duplicate-delivery",
+    "scenarioFile" : "scenarios/sj-004-duplicate-delivery.yaml",
+    "replicate" : 1,
+    "events" : 2
+  }, {
+    "id" : "0024-HARDENED-sj-113-r1",
+    "mode" : "HARDENED",
+    "scenario" : "sj-113",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-113.yaml",
+    "replicate" : 1,
+    "events" : 2
+  }, {
+    "id" : "0025-NEUTRAL-sj-103-r1",
+    "mode" : "NEUTRAL",
+    "scenario" : "sj-103",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-103.yaml",
+    "replicate" : 1,
+    "events" : 2
+  }, {
+    "id" : "0026-HARDENED-sj-103-r1",
+    "mode" : "HARDENED",
+    "scenario" : "sj-103",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-103.yaml",
+    "replicate" : 1,
+    "events" : 2
+  }, {
+    "id" : "0027-PROMPT_ONLY-sj-122-r1",
+    "mode" : "PROMPT_ONLY",
+    "scenario" : "sj-122",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-122.yaml",
+    "replicate" : 1,
+    "events" : 2
+  }, {
+    "id" : "0028-NEUTRAL-sj-131-r1",
+    "mode" : "NEUTRAL",
+    "scenario" : "sj-131",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-131.yaml",
+    "replicate" : 1,
+    "events" : 3
+  }, {
+    "id" : "0029-HARDENED-sj-131-r1",
+    "mode" : "HARDENED",
+    "scenario" : "sj-131",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-131.yaml",
+    "replicate" : 1,
+    "events" : 3
+  }, {
+    "id" : "0030-NEUTRAL-sj-121-r1",
+    "mode" : "NEUTRAL",
+    "scenario" : "sj-121",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-121.yaml",
+    "replicate" : 1,
+    "events" : 2
+  }, {
+    "id" : "0031-NEUTRAL-sj-113-r1",
+    "mode" : "NEUTRAL",
+    "scenario" : "sj-113",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-113.yaml",
+    "replicate" : 1,
+    "events" : 2
+  }, {
+    "id" : "0032-HARDENED-sj-123-r1",
+    "mode" : "HARDENED",
+    "scenario" : "sj-123",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-123.yaml",
+    "replicate" : 1,
+    "events" : 2
+  }, {
+    "id" : "0033-NEUTRAL-sj-141-r1",
+    "mode" : "NEUTRAL",
+    "scenario" : "sj-141",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-141.yaml",
+    "replicate" : 1,
+    "events" : 2
+  }, {
+    "id" : "0034-PROMPT_ONLY-sj-123-r1",
+    "mode" : "PROMPT_ONLY",
+    "scenario" : "sj-123",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-123.yaml",
+    "replicate" : 1,
+    "events" : 2
+  }, {
+    "id" : "0035-PROMPT_ONLY-sj-132-r1",
+    "mode" : "PROMPT_ONLY",
+    "scenario" : "sj-132",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-132.yaml",
+    "replicate" : 1,
+    "events" : 3
+  }, {
+    "id" : "0036-NEUTRAL-sj-133-r1",
+    "mode" : "NEUTRAL",
+    "scenario" : "sj-133",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-133.yaml",
+    "replicate" : 1,
+    "events" : 3
+  }, {
+    "id" : "0037-NEUTRAL-sj-122-r1",
+    "mode" : "NEUTRAL",
+    "scenario" : "sj-122",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-122.yaml",
+    "replicate" : 1,
+    "events" : 2
+  }, {
+    "id" : "0038-NEUTRAL-sj-004-duplicate-delivery-r1",
+    "mode" : "NEUTRAL",
+    "scenario" : "sj-004-duplicate-delivery",
+    "scenarioFile" : "scenarios/sj-004-duplicate-delivery.yaml",
+    "replicate" : 1,
+    "events" : 2
+  }, {
+    "id" : "0039-PROMPT_ONLY-sj-133-r1",
+    "mode" : "PROMPT_ONLY",
+    "scenario" : "sj-133",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-133.yaml",
+    "replicate" : 1,
+    "events" : 3
+  }, {
+    "id" : "0040-PROMPT_ONLY-sj-121-r1",
+    "mode" : "PROMPT_ONLY",
+    "scenario" : "sj-121",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-121.yaml",
+    "replicate" : 1,
+    "events" : 2
+  }, {
+    "id" : "0041-PROMPT_ONLY-sj-111-r1",
+    "mode" : "PROMPT_ONLY",
+    "scenario" : "sj-111",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-111.yaml",
+    "replicate" : 1,
+    "events" : 2
+  }, {
+    "id" : "0042-HARDENED-sj-122-r1",
+    "mode" : "HARDENED",
+    "scenario" : "sj-122",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-122.yaml",
+    "replicate" : 1,
+    "events" : 2
+  }, {
+    "id" : "0043-PROMPT_ONLY-sj-133-r2",
+    "mode" : "PROMPT_ONLY",
+    "scenario" : "sj-133",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-133.yaml",
+    "replicate" : 2,
+    "events" : 3
+  }, {
+    "id" : "0044-HARDENED-sj-113-r2",
+    "mode" : "HARDENED",
+    "scenario" : "sj-113",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-113.yaml",
+    "replicate" : 2,
+    "events" : 2
+  }, {
+    "id" : "0045-HARDENED-sj-132-r2",
+    "mode" : "HARDENED",
+    "scenario" : "sj-132",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-132.yaml",
+    "replicate" : 2,
+    "events" : 3
+  }, {
+    "id" : "0046-HARDENED-sj-131-r2",
+    "mode" : "HARDENED",
+    "scenario" : "sj-131",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-131.yaml",
+    "replicate" : 2,
+    "events" : 3
+  }, {
+    "id" : "0047-HARDENED-sj-133-r2",
+    "mode" : "HARDENED",
+    "scenario" : "sj-133",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-133.yaml",
+    "replicate" : 2,
+    "events" : 3
+  }, {
+    "id" : "0048-HARDENED-sj-112-r2",
+    "mode" : "HARDENED",
+    "scenario" : "sj-112",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-112.yaml",
+    "replicate" : 2,
+    "events" : 2
+  }, {
+    "id" : "0049-PROMPT_ONLY-sj-101-r2",
+    "mode" : "PROMPT_ONLY",
+    "scenario" : "sj-101",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-101.yaml",
+    "replicate" : 2,
+    "events" : 2
+  }, {
+    "id" : "0050-NEUTRAL-sj-004-duplicate-delivery-r2",
+    "mode" : "NEUTRAL",
+    "scenario" : "sj-004-duplicate-delivery",
+    "scenarioFile" : "scenarios/sj-004-duplicate-delivery.yaml",
+    "replicate" : 2,
+    "events" : 2
+  }, {
+    "id" : "0051-NEUTRAL-sj-111-r2",
+    "mode" : "NEUTRAL",
+    "scenario" : "sj-111",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-111.yaml",
+    "replicate" : 2,
+    "events" : 2
+  }, {
+    "id" : "0052-PROMPT_ONLY-sj-123-r2",
+    "mode" : "PROMPT_ONLY",
+    "scenario" : "sj-123",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-123.yaml",
+    "replicate" : 2,
+    "events" : 2
+  }, {
+    "id" : "0053-PROMPT_ONLY-sj-004-duplicate-delivery-r2",
+    "mode" : "PROMPT_ONLY",
+    "scenario" : "sj-004-duplicate-delivery",
+    "scenarioFile" : "scenarios/sj-004-duplicate-delivery.yaml",
+    "replicate" : 2,
+    "events" : 2
+  }, {
+    "id" : "0054-PROMPT_ONLY-sj-141-r2",
+    "mode" : "PROMPT_ONLY",
+    "scenario" : "sj-141",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-141.yaml",
+    "replicate" : 2,
+    "events" : 2
+  }, {
+    "id" : "0055-PROMPT_ONLY-sj-111-r2",
+    "mode" : "PROMPT_ONLY",
+    "scenario" : "sj-111",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-111.yaml",
+    "replicate" : 2,
+    "events" : 2
+  }, {
+    "id" : "0056-PROMPT_ONLY-sj-103-r2",
+    "mode" : "PROMPT_ONLY",
+    "scenario" : "sj-103",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-103.yaml",
+    "replicate" : 2,
+    "events" : 2
+  }, {
+    "id" : "0057-HARDENED-sj-122-r2",
+    "mode" : "HARDENED",
+    "scenario" : "sj-122",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-122.yaml",
+    "replicate" : 2,
+    "events" : 2
+  }, {
+    "id" : "0058-HARDENED-sj-004-duplicate-delivery-r2",
+    "mode" : "HARDENED",
+    "scenario" : "sj-004-duplicate-delivery",
+    "scenarioFile" : "scenarios/sj-004-duplicate-delivery.yaml",
+    "replicate" : 2,
+    "events" : 2
+  }, {
+    "id" : "0059-NEUTRAL-sj-133-r2",
+    "mode" : "NEUTRAL",
+    "scenario" : "sj-133",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-133.yaml",
+    "replicate" : 2,
+    "events" : 3
+  }, {
+    "id" : "0060-NEUTRAL-sj-131-r2",
+    "mode" : "NEUTRAL",
+    "scenario" : "sj-131",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-131.yaml",
+    "replicate" : 2,
+    "events" : 3
+  }, {
+    "id" : "0061-PROMPT_ONLY-sj-113-r2",
+    "mode" : "PROMPT_ONLY",
+    "scenario" : "sj-113",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-113.yaml",
+    "replicate" : 2,
+    "events" : 2
+  }, {
+    "id" : "0062-PROMPT_ONLY-sj-102-r2",
+    "mode" : "PROMPT_ONLY",
+    "scenario" : "sj-102",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-102.yaml",
+    "replicate" : 2,
+    "events" : 2
+  }, {
+    "id" : "0063-PROMPT_ONLY-sj-132-r2",
+    "mode" : "PROMPT_ONLY",
+    "scenario" : "sj-132",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-132.yaml",
+    "replicate" : 2,
+    "events" : 3
+  }, {
+    "id" : "0064-NEUTRAL-sj-132-r2",
+    "mode" : "NEUTRAL",
+    "scenario" : "sj-132",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-132.yaml",
+    "replicate" : 2,
+    "events" : 3
+  }, {
+    "id" : "0065-NEUTRAL-sj-141-r2",
+    "mode" : "NEUTRAL",
+    "scenario" : "sj-141",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-141.yaml",
+    "replicate" : 2,
+    "events" : 2
+  }, {
+    "id" : "0066-PROMPT_ONLY-sj-122-r2",
+    "mode" : "PROMPT_ONLY",
+    "scenario" : "sj-122",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-122.yaml",
+    "replicate" : 2,
+    "events" : 2
+  }, {
+    "id" : "0067-NEUTRAL-sj-103-r2",
+    "mode" : "NEUTRAL",
+    "scenario" : "sj-103",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-103.yaml",
+    "replicate" : 2,
+    "events" : 2
+  }, {
+    "id" : "0068-NEUTRAL-sj-112-r2",
+    "mode" : "NEUTRAL",
+    "scenario" : "sj-112",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-112.yaml",
+    "replicate" : 2,
+    "events" : 2
+  }, {
+    "id" : "0069-HARDENED-sj-102-r2",
+    "mode" : "HARDENED",
+    "scenario" : "sj-102",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-102.yaml",
+    "replicate" : 2,
+    "events" : 2
+  }, {
+    "id" : "0070-HARDENED-sj-111-r2",
+    "mode" : "HARDENED",
+    "scenario" : "sj-111",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-111.yaml",
+    "replicate" : 2,
+    "events" : 2
+  }, {
+    "id" : "0071-NEUTRAL-sj-123-r2",
+    "mode" : "NEUTRAL",
+    "scenario" : "sj-123",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-123.yaml",
+    "replicate" : 2,
+    "events" : 2
+  }, {
+    "id" : "0072-NEUTRAL-sj-113-r2",
+    "mode" : "NEUTRAL",
+    "scenario" : "sj-113",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-113.yaml",
+    "replicate" : 2,
+    "events" : 2
+  }, {
+    "id" : "0073-NEUTRAL-sj-122-r2",
+    "mode" : "NEUTRAL",
+    "scenario" : "sj-122",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-122.yaml",
+    "replicate" : 2,
+    "events" : 2
+  }, {
+    "id" : "0074-PROMPT_ONLY-sj-112-r2",
+    "mode" : "PROMPT_ONLY",
+    "scenario" : "sj-112",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-112.yaml",
+    "replicate" : 2,
+    "events" : 2
+  }, {
+    "id" : "0075-HARDENED-sj-141-r2",
+    "mode" : "HARDENED",
+    "scenario" : "sj-141",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-141.yaml",
+    "replicate" : 2,
+    "events" : 2
+  }, {
+    "id" : "0076-HARDENED-sj-123-r2",
+    "mode" : "HARDENED",
+    "scenario" : "sj-123",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-123.yaml",
+    "replicate" : 2,
+    "events" : 2
+  }, {
+    "id" : "0077-PROMPT_ONLY-sj-131-r2",
+    "mode" : "PROMPT_ONLY",
+    "scenario" : "sj-131",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-131.yaml",
+    "replicate" : 2,
+    "events" : 3
+  }, {
+    "id" : "0078-NEUTRAL-sj-102-r2",
+    "mode" : "NEUTRAL",
+    "scenario" : "sj-102",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-102.yaml",
+    "replicate" : 2,
+    "events" : 2
+  }, {
+    "id" : "0079-HARDENED-sj-121-r2",
+    "mode" : "HARDENED",
+    "scenario" : "sj-121",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-121.yaml",
+    "replicate" : 2,
+    "events" : 2
+  }, {
+    "id" : "0080-NEUTRAL-sj-121-r2",
+    "mode" : "NEUTRAL",
+    "scenario" : "sj-121",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-121.yaml",
+    "replicate" : 2,
+    "events" : 2
+  }, {
+    "id" : "0081-NEUTRAL-sj-101-r2",
+    "mode" : "NEUTRAL",
+    "scenario" : "sj-101",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-101.yaml",
+    "replicate" : 2,
+    "events" : 2
+  }, {
+    "id" : "0082-HARDENED-sj-101-r2",
+    "mode" : "HARDENED",
+    "scenario" : "sj-101",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-101.yaml",
+    "replicate" : 2,
+    "events" : 2
+  }, {
+    "id" : "0083-HARDENED-sj-103-r2",
+    "mode" : "HARDENED",
+    "scenario" : "sj-103",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-103.yaml",
+    "replicate" : 2,
+    "events" : 2
+  }, {
+    "id" : "0084-PROMPT_ONLY-sj-121-r2",
+    "mode" : "PROMPT_ONLY",
+    "scenario" : "sj-121",
+    "scenarioFile" : "experiments/defense-levels-v2/scenarios/sj-121.yaml",
+    "replicate" : 2,
+    "events" : 2
+  } ]
+}

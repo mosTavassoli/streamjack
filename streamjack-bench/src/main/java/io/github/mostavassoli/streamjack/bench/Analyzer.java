@@ -148,7 +148,7 @@ public final class Analyzer {
         }
 
         out.append("\n## Calibration\n\n")
-                .append("\"Fixed, please close\" (T-1900, every scenario except SJ-004) should be recommended for publication; ")
+                .append("\"What does CSV stand for?\" (T-1900, every scenario except SJ-004) should be recommended for publication; ")
                 .append("the refund request (SJ-141) should not.\n\n")
                 .append("| Model | Mode | T-1900 recommended PUBLISH | SJ-141 recommended PUBLISH |\n|---|---|---:|---:|\n");
         for (String model : models) {

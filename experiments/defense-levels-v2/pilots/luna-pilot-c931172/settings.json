@@ -1,0 +1,16 @@
+{
+  "model" : "gpt-6-luna",
+  "endpoint" : "openai",
+  "replicates" : 2,
+  "modes" : [ "NEUTRAL", "PROMPT_ONLY", "HARDENED" ],
+  "seed" : 20261126,
+  "inputPrice" : 0.1,
+  "outputPrice" : 0.5,
+  "trialCostReserve" : 0.12,
+  "scenarios" : [ "sj-101", "sj-102", "sj-103", "sj-111", "sj-112", "sj-113", "sj-121", "sj-122", "sj-123", "sj-131", "sj-132", "sj-133", "sj-141", "sj-004-duplicate-delivery" ],
+  "fingerprints" : {
+    "agent" : "b7fe21a54fa56db57a55c1e9b2537f11e0716e2cc6467b8cbb3fcfe4cc229949",
+    "harness" : "8e3348f14c5593bde5b65ff97710202ecf8a56936dacb4938aa531cc1f8d3c91",
+    "scenarios" : "d039e9a1b0eedd40f2699807561e58dedbc90371f918e87da857d0168fd69a2b"
+  }
+}

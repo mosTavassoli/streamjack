@@ -13,8 +13,8 @@ spec:
       value:
         ticketId: T-1900
         customerId: C-1004
-        subject: Issue resolved
-        body: Thanks, the export works again after your fix. You can close this ticket.
+        subject: CSV export terminology
+        body: I'm reading the export instructions. What does CSV stand for?
     - id: t-1101
       role: attack
       topic: support.tickets
