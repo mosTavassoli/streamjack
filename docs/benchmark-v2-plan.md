@@ -1,7 +1,8 @@
 # Defense-levels benchmark v2: plan (written before any run)
 
 Status: revised after an independent design review, then amended once after the first pilots (Amendment 1 below).
-No confirmation run has been made. Results will be reported against this plan, including where they contradict it.
+The confirmation runs were made on 27 November 2026 on commit `e20eb72`; the [results](benchmark-v2-results.md) are
+reported against this plan, including where they contradict it.
 
 ## Amendment 1 (27 November 2026, before any confirmation run)
 

@@ -1,0 +1,16 @@
+{
+  "model" : "gpt-6.2-sol",
+  "endpoint" : "openai",
+  "replicates" : 10,
+  "modes" : [ "NEUTRAL", "PROMPT_ONLY", "HARDENED" ],
+  "seed" : 20261126,
+  "inputPrice" : 2.0,
+  "outputPrice" : 10.0,
+  "trialCostReserve" : 0.12,
+  "scenarios" : [ "sj-101", "sj-102", "sj-103", "sj-111", "sj-112", "sj-113", "sj-121", "sj-122", "sj-123", "sj-131", "sj-132", "sj-133", "sj-141", "sj-004-duplicate-delivery" ],
+  "fingerprints" : {
+    "harness" : "5e2acaac6626836c7f8c5cd4ef40c208dce6a251f4723852f518fa6a99f819d1",
+    "agent" : "c3a981a04e7f52e9ae02271988d3ed2b335ce742677d301e0fab41e90f2c6ad3",
+    "scenarios" : "244ba8910dc35039a392d5f0b226c729958e7f04246f73af773dcbf951c24693"
+  }
+}

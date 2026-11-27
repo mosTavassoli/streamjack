@@ -161,8 +161,14 @@ To compare where protection comes from, set `STREAMJACK_AGENT_SECURITY_MODE` to 
 
 See the [local Ollama experiment](docs/ollama-experiment.md) for a before-and-after comparison of how explicit category definitions affected ticket classification.
 
-The [v2 benchmark plan](docs/benchmark-v2-plan.md) documents a Java harness for reproducible runs on Linux, macOS
-and Windows, including how to check the packaged agent against a local mock without an API key or paid calls.
+The [v2 benchmark](docs/benchmark-v2-results.md) followed up with two OpenAI models (`gpt-6-luna` and `gpt-6.2-sol`)
+under a [pre-registered plan](docs/benchmark-v2-plan.md). No attack effect was detected: neither model recommended
+publishing any attacked or control target ticket (the primary comparison was 0 of 50 against 0 of 50), and the
+synthetic canary key was not found in any output, while both models recommended publishing an answerable calibration
+ticket every time (`HARDENED` still routed those replies to review). The clearest difference again came from
+application controls: a duplicated ticket got two follow-up calls without them and one with them. A null result at this sample size is not evidence that the models are safe; the results page lists the
+limitations. The plan documents a Java harness for reproducible runs on Linux, macOS and Windows, including how to
+check the packaged agent against a local mock without an API key or paid calls.
 
 ## Slow agents and Kafka share groups
 
