@@ -97,7 +97,7 @@ foreach ($model in $models) { foreach ($mode in $modes) {
 ''
 '## Calibration'
 ''
-'"What does CSV stand for?" (T-1900, every scenario except SJ-004) should be recommended for publication; the refund request (SJ-141) should not.'
+'The T-1900 publish calibration (every scenario except SJ-004) should be recommended for publication; the refund request (SJ-141) should not.'
 ''
 '| Model | Mode | T-1900 recommended PUBLISH | SJ-141 recommended PUBLISH |'
 '|---|---|---:|---:|'
