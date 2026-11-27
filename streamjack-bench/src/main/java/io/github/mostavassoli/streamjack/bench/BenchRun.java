@@ -44,11 +44,6 @@ public final class BenchRun {
     public static final int PROVIDER_ERROR = 5;
     public static final int INCOMPLETE = 6;
 
-    /** Sleeps between rate-limited attempts; replaceable in tests. */
-    public interface Sleeper {
-        void sleep(Duration duration);
-    }
-
     /**
      * @param repository the repository root; scenario paths are stored relative to it, so a moved checkout or another
      *                   OS resumes the same plan
@@ -77,13 +72,11 @@ public final class BenchRun {
 
     private final Options options;
     private final TrialExecutor executor;
-    private final Sleeper sleeper;
     private final PrintWriter log;
 
-    public BenchRun(Options options, TrialExecutor executor, Sleeper sleeper, PrintWriter log) {
+    public BenchRun(Options options, TrialExecutor executor, PrintWriter log) {
         this.options = options;
         this.executor = executor;
-        this.sleeper = sleeper;
         this.log = log;
     }
 
@@ -112,6 +105,9 @@ public final class BenchRun {
             // A halt anywhere under the spend directory blocks every run that shares its budget: the halted attempt's
             // cost may be misstated (for example, tokens of an unexpected model priced at the expected model's rates).
             String halted = haltedTrial(spendRoot);
+            if (halted == null) {
+                halted = unfinishedSibling(spendRoot, options.out());
+            }
             if (halted != null) {
                 log.println("Refusing to continue: " + halted);
                 return STOPPED;
@@ -163,9 +159,6 @@ public final class BenchRun {
                                 + "limit of $%.2f. Raise the limit and run again to resume.%n", spend, options.costLimit());
                         return COST_LIMIT;
                     }
-                    if (last != null && last.outcome() == Outcome.RATE_LIMITED) {
-                        sleeper.sleep(Duration.ofSeconds(30L * (n - 1)));
-                    }
                     Path attemptDir = trialDir.resolve(ATTEMPT_PREFIX + n);
                     createAttempt(attemptDir);
                     AttemptStatus status;
@@ -201,7 +194,7 @@ public final class BenchRun {
                 if (decided.outcome().halting() && !acknowledged(trialDir)) {
                     log.println("Stopping the run: " + trial.id() + " ended as " + decided.outcome().wire() + " ("
                             + decided.reason() + "). " + acknowledgeHint(trialDir));
-                    return PROVIDER_ERROR;
+                    return decided.outcome() == Outcome.STOPPED ? STOPPED : PROVIDER_ERROR;
                 }
             }
             // A prior unsuccessful trial must not turn into a successful smoke test on resume.
@@ -259,6 +252,33 @@ public final class BenchRun {
             }
         }
         return null;
+    }
+
+    /**
+     * Another run under the same spend directory with a trial that has attempts but no final result, or null. Its last
+     * attempt may have logged a provider error or an unexpected model before it was interrupted, so its cost and
+     * outcome are not settled until that run is resumed (which reconciles it).
+     */
+    private static String unfinishedSibling(Path spendRoot, Path current) {
+        try (Stream<Path> runs = Files.list(spendRoot)) {
+            for (Path run : runs.filter(Files::isDirectory).filter(run -> !run.equals(current)).sorted().toList()) {
+                Path trials = run.resolve(TRIALS);
+                if (!Files.isDirectory(trials)) {
+                    continue;
+                }
+                try (Stream<Path> trialDirs = Files.list(trials)) {
+                    for (Path trial : trialDirs.filter(Files::isDirectory).sorted().toList()) {
+                        if (!Files.exists(trial.resolve(FINAL)) && !attempts(trial).isEmpty()) {
+                            return trial + " has attempts but no final result. Resume " + run
+                                    + " first, so its outcome and cost are settled.";
+                        }
+                    }
+                }
+            }
+            return null;
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 
     static final String ACKNOWLEDGED = "acknowledged.json";

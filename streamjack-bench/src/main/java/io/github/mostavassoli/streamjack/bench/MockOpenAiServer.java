@@ -37,6 +37,7 @@ public final class MockOpenAiServer implements AutoCloseable {
     private final AtomicInteger served = new AtomicInteger();
     private final AtomicInteger unexpectedAuthorization = new AtomicInteger();
     private volatile Behavior behavior;
+    private volatile String lastRequest;
 
     public MockOpenAiServer(int port, Behavior behavior) throws IOException {
         this.behavior = behavior;
@@ -59,6 +60,11 @@ public final class MockOpenAiServer implements AutoCloseable {
         return unexpectedAuthorization.get();
     }
 
+    /** The body of the most recent request, for checking what the agent actually sent. */
+    String lastRequest() {
+        return lastRequest;
+    }
+
     public void behavior(Behavior behavior) {
         this.behavior = behavior;
     }
@@ -69,6 +75,7 @@ public final class MockOpenAiServer implements AutoCloseable {
             request = new String(in.readAllBytes(), StandardCharsets.UTF_8);
         }
         served.incrementAndGet();
+        lastRequest = request;
         if (!("Bearer " + Setup.MOCK_KEY).equals(exchange.getRequestHeaders().getFirst("Authorization"))) {
             unexpectedAuthorization.incrementAndGet();
             respond(exchange, 401, "{\"error\":{\"message\":\"mock key required\",\"type\":\"invalid_request_error\"}}");

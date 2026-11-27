@@ -85,11 +85,11 @@ public final class DockerTrialExecutor implements TrialExecutor {
                         List.of(result)), attemptDir.resolve("report.json"));
                 Path evidence = new EvidenceWriter().write(execution, attemptDir.resolve("evidence"));
                 // The usage log is complete only once the agent has exited.
-                boolean exited = stopAgent(process);
+                Process stopping = process;
                 process = null;
-                status = exited
+                status = stopAgent(stopping)
                         ? AttemptClassifier.classify(trial, result, Files.exists(evidence), Usage.read(attemptDir))
-                        : AttemptStatus.of(Outcome.UNKNOWN, "the agent did not exit", trial.events());
+                        : notExited(stopping, trial);
             }
         } catch (RuntimeException | IOException e) {
             // Before the scenario starts no request can have been sent, so the attempt can be retried; afterwards a
@@ -98,8 +98,9 @@ public final class DockerTrialExecutor implements TrialExecutor {
             Outcome outcome = scenarioStarted ? Outcome.UNKNOWN : Outcome.SETUP_FAILED;
             status = AttemptStatus.of(outcome, "harness error: " + e.getClass().getSimpleName(), trial.events());
         } finally {
-            if (process != null) {
-                stopAgent(process);
+            if (process != null && !stopAgent(process)) {
+                // An agent that may still be running could still send requests with the key: halt everything.
+                status = notExited(process, trial);
             }
             if (broker != null) {
                 try {
@@ -185,6 +186,15 @@ public final class DockerTrialExecutor implements TrialExecutor {
             sleep(Duration.ofMillis(500));
         }
         return false;
+    }
+
+    /**
+     * The agent process did not confirm its exit: its usage log may be incomplete and it may still hold the key and
+     * send requests. Halting (STOPPED), with the process id for inspection.
+     */
+    private static AttemptStatus notExited(Process process, Trial trial) {
+        return AttemptStatus.of(Outcome.STOPPED, "the agent process (pid " + process.pid() + ") did not exit",
+                trial.events());
     }
 
     /** Stops the agent and returns whether it has exited (only then is its usage log complete). */

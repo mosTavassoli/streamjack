@@ -27,7 +27,7 @@ final class AttemptClassifier {
         if (result.execution() == ExecutionStatus.COMPLETED && evidenceWritten && errors.isEmpty()) {
             return AttemptStatus.of(Outcome.COMPLETED, "", trial.events());
         }
-        if (retryableRateLimit(trial, usage)) {
+        if (allCallsRateLimited(trial, usage)) {
             return AttemptStatus.of(Outcome.RATE_LIMITED, "provider rate limit", trial.events());
         }
         if (!errors.isEmpty()) {
@@ -50,18 +50,17 @@ final class AttemptClassifier {
     }
 
     /**
-     * A rate limit is retryable only if every expected model call was explicitly rate-limited and nothing else was
-     * logged: then no request was processed. With fewer rate-limit entries than calls, another request may have
-     * reached the provider, so the attempt is not retried.
+     * Whether every expected model call ended in a rate limit and nothing else was logged. Otherwise another request
+     * may have been processed, so the attempt is recorded as unknown rather than as a rate limit.
      */
-    static boolean retryableRateLimit(Trial trial, List<Usage.Entry> usage) {
+    static boolean allCallsRateLimited(Trial trial, List<Usage.Entry> usage) {
         return usage.size() == trial.events() && !usage.isEmpty() && usage.stream().allMatch(AttemptClassifier::rateLimit);
     }
 
     /**
      * Checks a status, fresh or recovered from an earlier invocation, against the usage log, the single source for
-     * what was sent: a logged provider error always halts the run, a retryable outcome must still be provably
-     * unbilled, and anything else stays as recorded.
+     * what was sent: a logged provider error always halts the run, a setup failure must have sent nothing, a rate limit
+     * must cover every expected call, and anything else stays as recorded.
      */
     static AttemptStatus reconcile(Trial trial, AttemptStatus status, List<Usage.Entry> usage) {
         List<String> providerErrors = usage.stream()
@@ -73,7 +72,7 @@ final class AttemptClassifier {
         if (status.outcome() == Outcome.SETUP_FAILED && !usage.isEmpty()) {
             return withOutcome(status, Outcome.UNKNOWN, "setup reported a failure after model calls were logged");
         }
-        if (status.outcome() == Outcome.RATE_LIMITED && !retryableRateLimit(trial, usage)) {
+        if (status.outcome() == Outcome.RATE_LIMITED && !allCallsRateLimited(trial, usage)) {
             return withOutcome(status, Outcome.UNKNOWN, "rate limit with calls that may have been processed");
         }
         return status;

@@ -103,14 +103,6 @@ public final class Bench {
                 BenchRun run = new BenchRun(
                         new BenchRun.Options(settings, out, repository, scenarioFiles, costLimit, maxAttempts, maxTrials),
                         new DockerTrialExecutor(new DockerTrialExecutor.Agent(agentDir, model, baseUrl, apiKey), repository),
-                        duration -> {
-                            try {
-                                Thread.sleep(duration.toMillis());
-                            } catch (InterruptedException e) {
-                                Thread.currentThread().interrupt();
-                                throw new IllegalStateException("Interrupted during retry backoff", e);
-                            }
-                        },
                         log);
                 return run.run();
             } catch (IllegalArgumentException | IllegalStateException e) {

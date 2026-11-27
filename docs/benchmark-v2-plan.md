@@ -118,16 +118,20 @@ guarantee on the provider bill.
 - A fresh Kafka broker and agent process for every trial; state is kept between the events of one scenario only.
 - The OpenAI client retries a failed request (server error, rate limit, timeout) once; it cannot be set lower. Failed
   requests are generally not billed, and any attempt with a model error counts at the worst-case trial cost.
-- Only attempts with no model call, or an explicit rate limit, are retried by the harness. Invalid model output, provider
-  errors, and interrupted attempts are final results, so retries cannot select for well-behaved answers.
+- Only an attempt that provably sent no request (the broker or agent did not start) is retried by the harness.
+  Invalid model output, provider errors, rate limits, and interrupted attempts are final results, so retries cannot
+  select for well-behaved answers and cannot repeat a billed request.
 - After every attempt, the served model and the number of model calls are checked; a mismatch stops the run.
-- A provider error (key, model access, unsupported request, server error) halts the run. A halt in any run blocks
-  every run that shares the spend directory, until a person has inspected the attempt, reconciled the provider's
-  usage, and run `streamjack-bench acknowledge --trial <trial directory>`. The halted trial is never replayed; the
-  run continues with the next trial.
+- A provider error (key, model access, unsupported request, server error), a rate limit, a failed usage check, or an
+  agent process that does not confirm its exit halts the run. A halt in any run blocks every run that shares the spend
+  directory, and so does another run's unfinished trial (attempts without a final result) until that run is resumed.
+  After inspecting a halted attempt and reconciling the provider's usage, run
+  `streamjack-bench acknowledge --trial <trial directory>`; the halted trial is never replayed, and the run continues
+  with the next trial.
 - The agent process starts with an allowlist of operating-system variables plus the harness's own settings, so no
-  other configuration (for example a Quarkus profile variable that changes the endpoint) can reach it. Exit codes: 0 every trial of the invocation completed, 3 cost limit,
-  4 stopped (usage check or halted run), 5 provider error, 6 some trials ended without completing.
+  other configuration (for example a Quarkus profile variable that changes the endpoint) can reach it.
+- Exit codes: 0 every trial of the invocation completed, 3 cost limit, 4 stopped (usage check, agent exit, or a halted
+  or unfinished run), 5 provider error or rate limit, 6 some trials ended without completing.
 - The OpenAI API is pinned to Chat Completions, so the real endpoint receives the same request the mock tests check.
 - JUnit checks cover recovery on both sides of a status write, wrong served models, missing usage, HTTP 429 and 500
   responses, the spend guard and changed settings.
@@ -136,8 +140,7 @@ guarantee on the provider bill.
   the usage log records model outcomes, not each internal HTTP retry.
   An interrupted run resumes from the manifest without repeating completed trials.
 - Variants are interleaved, not run in blocks.
-- Bounded retries with backoff on rate limits; a trial with an ambiguous outcome is marked unknown, not retried
-  silently.
+- A trial with an ambiguous outcome is marked unknown, not retried.
 - The served model name and token counts are recorded; the agent build fingerprint covers its prompts and settings.
 - Billed output tokens are capped per request. A local spend estimate (including pilots and the reserve for unclear
   attempts) stops the run before another attempt; reconcile it with provider usage.

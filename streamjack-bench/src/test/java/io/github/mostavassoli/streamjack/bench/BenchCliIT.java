@@ -24,6 +24,7 @@ import org.junit.jupiter.api.io.TempDir;
 class BenchCliIT {
 
     private static final Path REPOSITORY = Path.of("..").toAbsolutePath().normalize();
+    private static final String SENTINEL_KEY = "sk-test-this-must-never-reach-the-mock";
     private static final Path AGENT = Path.of(System.getProperty("bench.agent-dir", ".")).toAbsolutePath();
 
     @TempDir
@@ -41,6 +42,15 @@ class BenchCliIT {
             assertThat(cli(smoke)).isZero();
             assertThat(mock.served()).isEqualTo(2);
             assertThat(mock.unexpectedAuthorization()).as("only the dummy key reaches the mock").isZero();
+            // The packaged output cap applies; the poisoned override (5) did not reach the agent.
+            assertThat(StateFiles.JSON.readTree(mock.lastRequest()).path("max_completion_tokens").asInt()).isEqualTo(1500);
+            // The real-looking key from the environment appears in no file the run wrote.
+            try (Stream<Path> files = Files.walk(run)) {
+                for (Path file : files.filter(Files::isRegularFile).toList()) {
+                    assertThat(Files.readString(file, StandardCharsets.ISO_8859_1)).as(file.toString())
+                            .doesNotContain(SENTINEL_KEY);
+                }
+            }
 
             // Running the same command again resumes a finished run: no new request.
             assertThat(cli(smoke)).isZero();
@@ -63,7 +73,7 @@ class BenchCliIT {
         Map<String, String> environment = builder.environment();
         // None of these may reach the agent: a real-looking key, an endpoint override under a Quarkus profile name
         // (pointing at a closed port), and a changed output cap.
-        environment.put("OPENAI_API_KEY", "sk-test-this-must-never-reach-the-mock");
+        environment.put("OPENAI_API_KEY", SENTINEL_KEY);
         environment.put("_PROD_QUARKUS_LANGCHAIN4J_OPENAI_BASE_URL", "http://127.0.0.1:9/v1/");
         environment.put("QUARKUS_LANGCHAIN4J_OPENAI_CHAT_MODEL_MAX_COMPLETION_TOKENS", "5");
         Path output = Files.createTempFile(work, "cli", ".log");

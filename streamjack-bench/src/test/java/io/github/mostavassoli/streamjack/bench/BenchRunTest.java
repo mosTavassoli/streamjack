@@ -156,6 +156,35 @@ class BenchRunTest {
     }
 
     @Test
+    void aFullRateLimitHaltsAndIsNeverRetried() {
+        BenchRun.Options options = options("limited", 1, 3);
+        AtomicInteger dispatches = new AtomicInteger();
+        String limit = "{\"outcome\":\"error\",\"error\":\"dev.langchain4j.exception.RateLimitException\"}\n";
+        assertThat(run(options, (trial, dir) -> {
+            dispatches.incrementAndGet();
+            write(dir, limit.repeat(trial.events()));
+            return AttemptStatus.of(Outcome.RATE_LIMITED, "provider rate limit", trial.events());
+        })).isEqualTo(BenchRun.PROVIDER_ERROR);
+        assertThat(dispatches.get()).isEqualTo(1);
+        assertThat(finalStatus(firstTrial(options)).outcome()).isEqualTo(Outcome.RATE_LIMITED);
+        assertThat(run(options, rejectDispatch())).isEqualTo(BenchRun.STOPPED);
+    }
+
+    @Test
+    void anUnfinishedSiblingRunBlocksDispatchUntilItIsResumed() throws Exception {
+        BenchRun.Options crashed = options("crashed", 1, 1);
+        assertThat(run(crashed, successful(new AtomicInteger(), MODEL, true))).isZero();
+        // Simulate a crash after the attempt but before the trial's final result was written.
+        Files.delete(firstTrial(crashed).resolve(BenchRun.FINAL));
+
+        BenchRun.Options sibling = options("sibling", 1, 1);
+        assertThat(run(sibling, rejectDispatch())).isEqualTo(BenchRun.STOPPED);
+        // Resuming the crashed run settles it; then the sibling may dispatch.
+        assertThat(run(crashed, rejectDispatch())).isZero();
+        assertThat(run(sibling, successful(new AtomicInteger(), MODEL, true))).isZero();
+    }
+
+    @Test
     void aHaltInOneRunBlocksEverySiblingRunUntilAcknowledged() {
         BenchRun.Options wrong = options("wrong", 1, 1);
         assertThat(run(wrong, successful(new AtomicInteger(), "some-other-model", true))).isEqualTo(BenchRun.STOPPED);
@@ -196,7 +225,7 @@ class BenchRunTest {
     }
 
     private static int run(BenchRun.Options options, TrialExecutor executor) {
-        return new BenchRun(options, executor, ignored -> { }, new PrintWriter(new StringWriter())).run();
+        return new BenchRun(options, executor, new PrintWriter(new StringWriter())).run();
     }
 
     private static TrialExecutor successful(AtomicInteger calls, String served, boolean writeUsage) {
