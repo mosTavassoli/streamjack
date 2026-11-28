@@ -1,0 +1,173 @@
+{
+    "study":  "realistic-attack study v3, Part B",
+    "plan":  "docs/benchmark-v3-plan.md",
+    "scheme":  "commitment = SHA-256 hex of UTF-8 bytes of nonce + LF + payload; nonce = 32 random hex characters, kept private and revealed with the fixtures after confirmation. Candidate payload: the exact template string (placeholders {orderId}, {claim} lower case, {CLAIM} upper case). Case payload: RFC 8785 canonical JSON of the complete case object (id, customerId, orderId, status, claim, benignNote, subject, body).",
+    "counts":  {
+                   "candidates":  12,
+                   "development":  4,
+                   "heldOut":  10
+               },
+    "validation":  {
+                       "expansionsChecked":  168,
+                       "rules":  "every placeholder defined and replaced; note length \u003c= 2000; claimed status differs from true status; each ticket contains exactly one standalone order id, equal to its order; benign notes contain no order id",
+                       "problems":  0
+                   },
+    "items":  [
+                  {
+                      "id":  "C01",
+                      "kind":  "candidate",
+                      "version":  1,
+                      "commitment":  "45e2ff9862b33d55329763ae92b3e0396ba45510cd7b444606b2265eefb3ffea"
+                  },
+                  {
+                      "id":  "C02",
+                      "kind":  "candidate",
+                      "version":  1,
+                      "commitment":  "78bef638e26acaa84ced276e6a6aebb4138e2c5404b84de0d966044ad50e2892"
+                  },
+                  {
+                      "id":  "C03",
+                      "kind":  "candidate",
+                      "version":  1,
+                      "commitment":  "8b9bd15637b232c5444a4ba62c2bb75e4a2c76b6ba5e61d1ef57015e5ae2ff7c"
+                  },
+                  {
+                      "id":  "C04",
+                      "kind":  "candidate",
+                      "version":  1,
+                      "commitment":  "540050e366da734058c2b5ccb544b7c0ed2334d4723f82629934128de4dda354"
+                  },
+                  {
+                      "id":  "C05",
+                      "kind":  "candidate",
+                      "version":  1,
+                      "commitment":  "f3276fb3b7861c25703a8de6534883fa6bf19b4898bb9eb5ad37409ecf1e7892"
+                  },
+                  {
+                      "id":  "C06",
+                      "kind":  "candidate",
+                      "version":  1,
+                      "commitment":  "6c82de976a638d6399d2f103d158a939dadb55cee7449b458d22d83f0280afbf"
+                  },
+                  {
+                      "id":  "C07",
+                      "kind":  "candidate",
+                      "version":  1,
+                      "commitment":  "5b7ac8af8837fb79057ea34cabc6b5202278ac1eb8f5a6dac445ca4474cd0641"
+                  },
+                  {
+                      "id":  "C08",
+                      "kind":  "candidate",
+                      "version":  1,
+                      "commitment":  "412ea8a3d3e61718cceab406666cfaba6f75c7ecfee2008f8db35223eb68bb92"
+                  },
+                  {
+                      "id":  "C09",
+                      "kind":  "candidate",
+                      "version":  1,
+                      "commitment":  "2b8e6050320e8957b8f85a487946142ea624072b10aa86f11b1bb0d4c3436e4b"
+                  },
+                  {
+                      "id":  "C10",
+                      "kind":  "candidate",
+                      "version":  1,
+                      "commitment":  "68001a567b0bfd0bfa7c5bfcedfbf6f6e09fb6d0ff8a6f50d577c7b803e51b76"
+                  },
+                  {
+                      "id":  "C11",
+                      "kind":  "candidate",
+                      "version":  1,
+                      "commitment":  "9bd7e667e376b652f19bdbb900f63f1ae6169ea2b99627cc12b9406c7295d9b8"
+                  },
+                  {
+                      "id":  "C12",
+                      "kind":  "candidate",
+                      "version":  1,
+                      "commitment":  "1c389d56a3ca36f0d72bcc368c1cb97443e1eceac840e254ab39b1e5abaa7c4a"
+                  },
+                  {
+                      "id":  "D1",
+                      "kind":  "development",
+                      "version":  1,
+                      "commitment":  "5f34cba17ef65997e87318a3756e3b40a872ebb875801130988512059df751fe"
+                  },
+                  {
+                      "id":  "D2",
+                      "kind":  "development",
+                      "version":  1,
+                      "commitment":  "52570eb0980b876d686b27e6c13fc62c7d34ad557cd24d8c989778f05c614650"
+                  },
+                  {
+                      "id":  "D3",
+                      "kind":  "development",
+                      "version":  1,
+                      "commitment":  "81f57ea35ae0828e9ddfd96fa12c3be6e1db18055a185cddf0b3e330641c4815"
+                  },
+                  {
+                      "id":  "D4",
+                      "kind":  "development",
+                      "version":  1,
+                      "commitment":  "dbbedfadedc9eadd6c00eed29471edb5ca53d92dc2f2867a1a4526d67cb5bd58"
+                  },
+                  {
+                      "id":  "H01",
+                      "kind":  "heldOut",
+                      "version":  1,
+                      "commitment":  "7fc2a13f6bce802e7313c5cdc036dddcb775bbd27ca7041db84e555e00beca73"
+                  },
+                  {
+                      "id":  "H02",
+                      "kind":  "heldOut",
+                      "version":  1,
+                      "commitment":  "131663673d4650ae6bb6e3001579ab63b82d4a860158b516971400f9121514ee"
+                  },
+                  {
+                      "id":  "H03",
+                      "kind":  "heldOut",
+                      "version":  1,
+                      "commitment":  "8218c76a3c306cd88af6484892ed9323e3e3a985108df7b5c87c529b13a99b09"
+                  },
+                  {
+                      "id":  "H04",
+                      "kind":  "heldOut",
+                      "version":  1,
+                      "commitment":  "584a3844e14f61c863011a543088f0c7de4d6857ffeca17d28aa0e7f60850d87"
+                  },
+                  {
+                      "id":  "H05",
+                      "kind":  "heldOut",
+                      "version":  1,
+                      "commitment":  "fad929f09918535e47a47d460ed985deaa1318e5cf5d3958ac0d92467da68a96"
+                  },
+                  {
+                      "id":  "H06",
+                      "kind":  "heldOut",
+                      "version":  1,
+                      "commitment":  "82ec3c809bf025492b9aa5e781463e0ec11ca297cd6f281307e7ea7f1e10522d"
+                  },
+                  {
+                      "id":  "H07",
+                      "kind":  "heldOut",
+                      "version":  1,
+                      "commitment":  "142ed8e665a323f4d654daa71f965ebe4a543abee1fe529978b031cfbe17b65d"
+                  },
+                  {
+                      "id":  "H08",
+                      "kind":  "heldOut",
+                      "version":  1,
+                      "commitment":  "f9f2eeca4ecd732b793dc890de1ba194606631e1f33473996315af58ee1e244e"
+                  },
+                  {
+                      "id":  "H09",
+                      "kind":  "heldOut",
+                      "version":  1,
+                      "commitment":  "49b8da30e089348eaddb3c7a80c05d13de74b4a5a499668caa80404217efab1c"
+                  },
+                  {
+                      "id":  "H10",
+                      "kind":  "heldOut",
+                      "version":  1,
+                      "commitment":  "f6b57e12fd03e233af9c1eb2caf8884ba22d5ce40b50034c033b88d67af27f0d"
+                  }
+              ]
+}
