@@ -16,6 +16,13 @@ public interface AgentConfiguration {
     IdentitySource identitySource();
 
     /**
+     * Whether a ticket that mentions an order id gets that order's record from the simulated order system (the v3
+     * study). Off by default, so tickets that mention an order without an order record (v2) behave as before.
+     */
+    @WithDefault("false")
+    boolean orderLookup();
+
+    /**
      * Where the agent takes the customer identity from. It is independent of the security mode, so identity binding
      * can be tested with cross-ticket memory still enabled.
      */

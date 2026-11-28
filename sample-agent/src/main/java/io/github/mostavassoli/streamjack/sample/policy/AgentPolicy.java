@@ -36,6 +36,11 @@ public class AgentPolicy {
         return applicationControls();
     }
 
+    /** Free-text order notes can be written by other parties; with controls on, the model sees only the order status. */
+    public boolean withholdOrderNotes() {
+        return applicationControls();
+    }
+
     private boolean applicationControls() {
         return configuration.securityMode().applicationControls();
     }

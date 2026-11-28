@@ -11,6 +11,8 @@ import io.github.mostavassoli.streamjack.sample.config.AgentConfiguration;
 import io.github.mostavassoli.streamjack.sample.customer.CustomerContext;
 import io.github.mostavassoli.streamjack.sample.customer.CustomerDirectory;
 import io.github.mostavassoli.streamjack.sample.domain.Disposition;
+import io.github.mostavassoli.streamjack.sample.domain.OrderRecord;
+import io.github.mostavassoli.streamjack.sample.order.OrderStore;
 import io.github.mostavassoli.streamjack.sample.domain.TicketAnalysis;
 import io.github.mostavassoli.streamjack.sample.domain.TicketCreated;
 import io.github.mostavassoli.streamjack.sample.domain.TriageResult;
@@ -38,11 +40,15 @@ public class TicketConsumer {
     private final AnalysisValidator analysisValidator;
     private final AgentPolicy policy;
     private final TicketMemory memory;
+    private static final java.time.Duration ORDER_WAIT = java.time.Duration.ofSeconds(10);
+
     private final KafkaOutputPublisher publisher;
     private final AgentConfiguration configuration;
+    private final OrderStore orders;
 
     public TicketConsumer(
             AgentConfiguration configuration,
+            OrderStore orders,
             ObjectMapper json,
             HeaderPolicy headerPolicy,
             CustomerDirectory customers,
@@ -67,6 +73,7 @@ public class TicketConsumer {
         this.memory = memory;
         this.publisher = publisher;
         this.configuration = configuration;
+        this.orders = orders;
     }
 
     @Incoming("tickets")
@@ -93,6 +100,9 @@ public class TicketConsumer {
             return message.ack();
         } catch (InvalidTicketException | JsonProcessingException e) {
             publisher.failed(correlation, "INVALID_EVENT");
+            return message.ack();
+        } catch (OrderUnavailableException e) {
+            publisher.failed(correlation, "ORDER_NOT_AVAILABLE");
             return message.ack();
         } catch (AnalysisValidator.InvalidModelOutputException e) {
             publisher.failed(correlation, "MODEL_OUTPUT_INVALID");
@@ -132,8 +142,9 @@ public class TicketConsumer {
         CustomerContext customerContext = customers.findPromptContext(customerId);
         Map<String, String> headers = headerPolicy.modelHeaders(metadata.getHeaders());
         String priorText = policy.retainCrossTicketMemory() ? memory.previous(customerId) : "";
+        OrderRecord order = orderFor(ticket, customerId);
         TicketAnalysis analysis = analysisValidator.validate(
-                model.analyze(new ModelInput(ticket, customerContext, headers, priorText)));
+                model.analyze(new ModelInput(ticket, customerContext, headers, priorText, order)));
         Disposition disposition = policy.disposition(analysis);
 
         if (analysis.followUpRequested()) {
@@ -159,6 +170,38 @@ public class TicketConsumer {
         }
     }
 
+    /**
+     * The order the ticket refers to (the first order id in its subject or body), as the order system holds it, or
+     * {@code null} if it refers to none or the order belongs to another customer. Waits briefly for the order record,
+     * because orders and tickets are read from different topics.
+     *
+     * @throws OrderUnavailableException if the ticket refers to an order the order system does not provide in time
+     */
+    private OrderRecord orderFor(TicketCreated ticket, String customerId) {
+        if (!configuration.orderLookup()) {
+            return null;
+        }
+        // Only the ticket is searched; order notes are never parsed for ids.
+        java.util.regex.Matcher id = OrderRecord.ORDER_ID_IN_TEXT.matcher(ticket.subject() + "\n" + ticket.body());
+        if (!id.find()) {
+            return null;
+        }
+        OrderRecord order;
+        try {
+            order = orders.await(id.group(), ORDER_WAIT);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new OrderUnavailableException();
+        }
+        if (order == null) {
+            throw new OrderUnavailableException();
+        }
+        if (!order.belongsTo(customerId)) {
+            return null;
+        }
+        return policy.withholdOrderNotes() ? order.withoutNote() : order;
+    }
+
     private static boolean isDenied(Throwable failure) {
         for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
             if (cause instanceof org.apache.kafka.common.errors.AuthorizationException) {
@@ -182,6 +225,11 @@ public class TicketConsumer {
     @SuppressWarnings("unchecked")
     private static <K, V> IncomingKafkaRecordMetadata<K, V> castMetadata(IncomingKafkaRecordMetadata<?, ?> metadata) {
         return (IncomingKafkaRecordMetadata<K, V>) metadata;
+    }
+
+    private static final class OrderUnavailableException extends RuntimeException {
+
+        private static final long serialVersionUID = 1L;
     }
 
     private static final class InvalidTicketException extends RuntimeException {

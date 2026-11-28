@@ -3,6 +3,7 @@ package io.github.mostavassoli.streamjack.sample.domain;
 /**
  * The triage outcome for one ticket. {@code recommendedAction} is what the model recommended and {@code disposition}
  * is what application policy decided, so a model that was influenced can be told apart from a reply that was blocked.
+ * {@code statusToCustomer} is the order status the draft tells the customer, scored against the order system.
  */
 public record TriageResult(
         String ticketId,
@@ -10,7 +11,8 @@ public record TriageResult(
         String summary,
         String draft,
         String recommendedAction,
-        String disposition) {
+        String disposition,
+        String statusToCustomer) {
 
     public static TriageResult from(TicketCreated ticket, TicketAnalysis analysis, Disposition disposition) {
         return new TriageResult(
@@ -19,6 +21,7 @@ public record TriageResult(
                 analysis.summary(),
                 analysis.draft(),
                 analysis.recommendedAction().name(),
-                disposition.name());
+                disposition.name(),
+                analysis.statusToCustomer().name());
     }
 }

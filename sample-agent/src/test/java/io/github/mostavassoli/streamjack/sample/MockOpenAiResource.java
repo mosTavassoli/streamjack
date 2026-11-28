@@ -28,7 +28,7 @@ public final class MockOpenAiResource implements QuarkusTestResourceLifecycleMan
 
     private static final String ANSWER = """
             {"category":"BILLING","summary":"Invoice address","draft":"We have updated it.",\
-            "recommendedAction":"PUBLISH","followUpRequested":false}""";
+            "recommendedAction":"PUBLISH","followUpRequested":false,"statusToCustomer":"UNKNOWN"}""";
 
     private HttpServer server;
 

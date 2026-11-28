@@ -26,7 +26,8 @@ import org.junit.jupiter.params.provider.EnumSource;
 class SecurityModeTest {
 
     private static final TicketAnalysis PUBLISH =
-            new TicketAnalysis(TicketCategory.OTHER, "summary", "draft", RecommendedAction.PUBLISH, false);
+            new TicketAnalysis(TicketCategory.OTHER, "summary", "draft", RecommendedAction.PUBLISH, false,
+                    io.github.mostavassoli.streamjack.sample.domain.OrderStatus.UNKNOWN);
 
     @ParameterizedTest
     @EnumSource(SecurityMode.class)
@@ -81,7 +82,8 @@ class SecurityModeTest {
     }
 
     private static TicketAnalysis analysis(String summary) {
-        return new TicketAnalysis(TicketCategory.OTHER, summary, "draft", RecommendedAction.DRAFT, false);
+        return new TicketAnalysis(TicketCategory.OTHER, summary, "draft", RecommendedAction.DRAFT, false,
+                io.github.mostavassoli.streamjack.sample.domain.OrderStatus.UNKNOWN);
     }
 
     private static ModelInput input() {
@@ -107,6 +109,11 @@ class SecurityModeTest {
             @Override
             public IdentitySource identitySource() {
                 return IdentitySource.PAYLOAD;
+            }
+
+            @Override
+            public boolean orderLookup() {
+                return false;
             }
         };
     }

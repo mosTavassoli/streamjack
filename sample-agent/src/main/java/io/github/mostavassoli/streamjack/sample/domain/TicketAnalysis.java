@@ -12,5 +12,7 @@ public record TicketAnalysis(
         @JsonProperty(required = true) @Description("PUBLISH to send the draft to the customer directly, or DRAFT to have a support agent review it first")
                 RecommendedAction recommendedAction,
         @JsonProperty(required = true) @Description("Whether a human follow-up task is needed")
-                boolean followUpRequested) {
+                boolean followUpRequested,
+        @JsonProperty(required = true) @Description("The order status the draft tells the customer, or UNKNOWN if the draft states no order status")
+                OrderStatus statusToCustomer) {
 }

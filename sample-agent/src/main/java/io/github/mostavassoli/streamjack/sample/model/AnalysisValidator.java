@@ -10,6 +10,7 @@ public class AnalysisValidator {
         if (analysis == null
                 || analysis.category() == null
                 || analysis.recommendedAction() == null
+                || analysis.statusToCustomer() == null
                 || analysis.summary() == null
                 || analysis.summary().isBlank()
                 || analysis.summary().length() > 300

@@ -15,10 +15,14 @@ import java.util.concurrent.ConcurrentHashMap;
 public class RecordingScriptedModel extends ScriptedTicketModel {
 
     public static final Map<String, ModelInput> INPUTS = new ConcurrentHashMap<>();
+    public static final Map<String, TicketAnalysis> OUTPUTS = new ConcurrentHashMap<>();
 
     @Override
     public TicketAnalysis analyze(ModelInput input) {
+        TicketAnalysis analysis = super.analyze(input);
+        // The answer is stored first, so a test that sees the input can always read the answer.
+        OUTPUTS.put(input.ticket().ticketId(), analysis);
         INPUTS.put(input.ticket().ticketId(), input);
-        return super.analyze(input);
+        return analysis;
     }
 }

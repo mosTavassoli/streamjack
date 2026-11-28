@@ -37,6 +37,7 @@ import org.testcontainers.images.builder.Transferable;
 public final class PublicationAuthorizationKafkaResource implements QuarkusTestResourceLifecycleManager {
 
     static final String TICKETS = "support.tickets";
+    static final String ORDERS = "support.orders";
     static final String TRIAGE = "support.triage";
     static final String PUBLISHED = "support.published";
     static final String AGENT = "triage-agent";
@@ -128,7 +129,7 @@ public final class PublicationAuthorizationKafkaResource implements QuarkusTestR
     private Map<String, String> agentConfig() {
         Map<String, String> settings = new HashMap<>();
         // Pin each channel to the disposable broker and give Quarkus only the restricted identity.
-        for (String channel : List.of("incoming.tickets", "outgoing.triage-results",
+        for (String channel : List.of("incoming.tickets", "incoming.orders", "outgoing.triage-results",
                 "outgoing.audit-events", "outgoing.published-replies")) {
             String prefix = "mp.messaging." + channel + ".";
             clientSettings(AGENT, agentPassword)
@@ -140,11 +141,13 @@ public final class PublicationAuthorizationKafkaResource implements QuarkusTestR
 
     private void provision() throws ExecutionException, InterruptedException, TimeoutException {
         try (Admin admin = Admin.create(clientSettings(ADMIN, adminPassword))) {
-            admin.createTopics(List.of(TICKETS, TRIAGE, PUBLISHED, INTAKE, AgentProtocol.AUDIT_TOPIC).stream()
+            admin.createTopics(List.of(TICKETS, ORDERS, TRIAGE, PUBLISHED, INTAKE, AgentProtocol.AUDIT_TOPIC).stream()
                     .map(name -> new NewTopic(name, 1, (short) 1)).toList()).all().get(20, TimeUnit.SECONDS);
             admin.createAcls(List.of(
                     allow(AGENT, ResourceType.TOPIC, TICKETS, AclOperation.READ),
                     allow(AGENT, ResourceType.GROUP, GROUP, AclOperation.READ),
+                    allow(AGENT, ResourceType.TOPIC, ORDERS, AclOperation.READ),
+                    allow(AGENT, ResourceType.GROUP, GROUP + "-orders", AclOperation.READ),
                     allow(AGENT, ResourceType.TOPIC, TRIAGE, AclOperation.WRITE),
                     allow(AGENT, ResourceType.TOPIC, AgentProtocol.AUDIT_TOPIC, AclOperation.WRITE),
                     // Let the agent look up the topic so the broker rejects the write itself.

@@ -31,7 +31,7 @@ public final class MockOpenAiServer implements AutoCloseable {
     static final int OUTPUT_TOKENS = 150;
     private static final Pattern MODEL = Pattern.compile("\"model\"\\s*:\\s*\"([^\"]+)\"");
     private static final String ANSWER = "{\\\"category\\\":\\\"OTHER\\\",\\\"summary\\\":\\\"Mock summary\\\","
-            + "\\\"draft\\\":\\\"Mock reply.\\\",\\\"recommendedAction\\\":\\\"DRAFT\\\",\\\"followUpRequested\\\":true}";
+            + "\\\"draft\\\":\\\"Mock reply.\\\",\\\"recommendedAction\\\":\\\"DRAFT\\\",\\\"followUpRequested\\\":true,\\\"statusToCustomer\\\":\\\"UNKNOWN\\\"}";
 
     private final HttpServer server;
     private final AtomicInteger served = new AtomicInteger();

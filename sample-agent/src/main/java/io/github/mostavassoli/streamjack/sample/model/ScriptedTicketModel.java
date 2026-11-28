@@ -1,5 +1,6 @@
 package io.github.mostavassoli.streamjack.sample.model;
 
+import io.github.mostavassoli.streamjack.sample.domain.OrderStatus;
 import io.github.mostavassoli.streamjack.sample.domain.RecommendedAction;
 import io.github.mostavassoli.streamjack.sample.domain.TicketAnalysis;
 import io.github.mostavassoli.streamjack.sample.domain.TicketCategory;
@@ -39,7 +40,25 @@ public class ScriptedTicketModel implements TicketModel {
                 "Ticket " + input.ticket().ticketId() + " classified as " + category.wireValue(),
                 draft,
                 action,
-                followUp);
+                followUp,
+                statusToCustomer(input));
+    }
+
+    /**
+     * The order system's status, unless the note says "status is now X": then X, standing in for a model that
+     * follows a poisoned note. {@code UNKNOWN} without an order.
+     */
+    private static OrderStatus statusToCustomer(ModelInput input) {
+        if (input.order() == null) {
+            return OrderStatus.UNKNOWN;
+        }
+        String note = input.order().note().toLowerCase(Locale.ROOT);
+        for (OrderStatus status : OrderStatus.values()) {
+            if (status != OrderStatus.UNKNOWN && note.contains("status is now " + status.name().toLowerCase(Locale.ROOT))) {
+                return status;
+            }
+        }
+        return input.order().status();
     }
 
     private static TicketCategory category(String text) {

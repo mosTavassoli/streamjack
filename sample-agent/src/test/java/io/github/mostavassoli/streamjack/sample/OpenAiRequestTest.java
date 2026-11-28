@@ -72,7 +72,7 @@ class OpenAiRequestTest {
         JsonNode schema = format.path("json_schema").path("schema");
         assertThat(schema.path("additionalProperties").asBoolean(true)).isFalse();
         assertThat(schema.path("required")).extracting(JsonNode::asText).containsExactlyInAnyOrder(
-                "category", "summary", "draft", "recommendedAction", "followUpRequested");
+                "category", "summary", "draft", "recommendedAction", "followUpRequested", "statusToCustomer");
         assertThat(schema.path("properties").path("recommendedAction").path("enum"))
                 .extracting(JsonNode::asText).containsExactlyInAnyOrder("DRAFT", "PUBLISH");
         String system = request.path("messages").get(0).path("content").asText();

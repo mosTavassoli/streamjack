@@ -81,6 +81,8 @@ The hardened sample minimizes model-visible customer data, excludes arbitrary Ka
 
 The sample agent's customer identity is configured separately from the security mode with `streamjack.agent.identity-source`. The default, `PAYLOAD`, trusts the payload's `customerId`. With `CHANNEL`, the agent requires exactly one `streamjack-authenticated-customer` header matching `C-` followed by 1 to 12 digits, rejects the ticket if it is missing, repeated, malformed, or different from the payload's claim, and never passes it to the model. The header is trustworthy only when ACLs let a single gateway principal write to the ticket topic and that gateway derives the identity from an independently authenticated customer. This is a sample-agent convention, not a runner-reserved header, and does not change the versioned scenario or report format. See the [customer identity finding](customer-identity-finding.md).
 
+For the [v3 study](benchmark-v3-plan.md), the sample agent can read a simulated order system from the `support.orders` topic (`streamjack.agent.order-lookup=true`, off by default). Its triage records gain a `statusToCustomer` field, and every prompt now asks for it, so earlier benchmark results apply to their pinned builds. The order consumer is always subscribed; only the lookup is opt-in. Both belong to the sample agent: scenarios already send events to any input topic, so the versioned scenario and report formats do not change.
+
 ## Kafka execution protocol
 
 ### Input headers

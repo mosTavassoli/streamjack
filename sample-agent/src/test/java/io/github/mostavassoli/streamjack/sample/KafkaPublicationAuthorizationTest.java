@@ -197,7 +197,7 @@ public class KafkaPublicationAuthorizationTest {
             }
             // A preset model recommendation, not an instruction embedded in ticket text.
             return new TicketAnalysis(analysis.category(), analysis.summary(), analysis.draft(),
-                    RecommendedAction.PUBLISH, analysis.followUpRequested());
+                    RecommendedAction.PUBLISH, analysis.followUpRequested(), analysis.statusToCustomer());
         }
     }
 
