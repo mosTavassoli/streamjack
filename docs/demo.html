@@ -173,6 +173,10 @@ Kafka ACL demo: fixture-publisher -&gt; support.published (record observed at of
       <p class="why">Utility is scored separately from security, so a defense that blocks every event would fail.
         This recording uses the sample's scripted model so it is reproducible. The checks are the same when the
         agent calls a real model.</p>
+      <p class="why"><strong>With real models:</strong> in 940 runs on two OpenAI models, no injection we measured
+        made the model recommend publishing, but a ticket delivered twice still caused two follow-ups unless the
+        application deduplicated them.
+        <a href="https://github.com/mosTavassoli/streamjack/blob/main/docs/benchmark-v2-results.md">Results and limitations.</a></p>
     </div>
     <div class="card">
       <h2>Reproduce it</h2>
