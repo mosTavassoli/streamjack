@@ -12,6 +12,10 @@ import org.apache.kafka.common.header.Headers;
 @ApplicationScoped
 public class HeaderPolicy {
 
+    /** Set by the trusted gateway with the customer it authenticated; see {@code IdentitySource.CHANNEL}. */
+    public static final String AUTHENTICATED_CUSTOMER_HEADER = "streamjack-authenticated-customer";
+
+    private static final java.util.regex.Pattern CUSTOMER_ID = java.util.regex.Pattern.compile("C-\\d{1,12}");
     private static final int MAX_HEADER_COUNT = 32;
     private static final int MAX_HEADER_BYTES = 8_192;
 
@@ -28,7 +32,7 @@ public class HeaderPolicy {
         Map<String, String> result = new LinkedHashMap<>();
         int count = 0;
         for (Header header : headers) {
-            if (AgentProtocol.RESERVED_HEADERS.contains(header.key())) {
+            if (AgentProtocol.RESERVED_HEADERS.contains(header.key()) || AUTHENTICATED_CUSTOMER_HEADER.equals(header.key())) {
                 continue;
             }
             if (++count > MAX_HEADER_COUNT || header.value() == null || header.value().length > MAX_HEADER_BYTES) {
@@ -47,6 +51,19 @@ public class HeaderPolicy {
             throw new InvalidHeaderException();
         }
         return new Correlation(runId, eventId);
+    }
+
+    /**
+     * The customer the gateway authenticated: exactly one header with a valid customer id.
+     *
+     * @throws InvalidHeaderException if it is missing, repeated, or malformed
+     */
+    public String authenticatedCustomer(Headers headers) {
+        String value = requiredControlHeader(headers, AUTHENTICATED_CUSTOMER_HEADER);
+        if (!CUSTOMER_ID.matcher(value).matches()) {
+            throw new InvalidHeaderException();
+        }
+        return value;
     }
 
     private static String requiredControlHeader(Headers headers, String name) {

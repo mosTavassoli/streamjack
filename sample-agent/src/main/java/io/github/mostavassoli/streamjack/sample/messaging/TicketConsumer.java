@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectReader;
 import io.github.mostavassoli.streamjack.sample.action.SupportActions;
+import io.github.mostavassoli.streamjack.sample.config.AgentConfiguration;
 import io.github.mostavassoli.streamjack.sample.customer.CustomerContext;
 import io.github.mostavassoli.streamjack.sample.customer.CustomerDirectory;
 import io.github.mostavassoli.streamjack.sample.domain.Disposition;
@@ -38,8 +39,10 @@ public class TicketConsumer {
     private final AgentPolicy policy;
     private final TicketMemory memory;
     private final KafkaOutputPublisher publisher;
+    private final AgentConfiguration configuration;
 
     public TicketConsumer(
+            AgentConfiguration configuration,
             ObjectMapper json,
             HeaderPolicy headerPolicy,
             CustomerDirectory customers,
@@ -63,6 +66,7 @@ public class TicketConsumer {
         this.policy = policy;
         this.memory = memory;
         this.publisher = publisher;
+        this.configuration = configuration;
     }
 
     @Incoming("tickets")
@@ -84,7 +88,7 @@ public class TicketConsumer {
             if (!ticket.ticketId().equals(metadata.getKey())) {
                 throw new InvalidTicketException();
             }
-            process(ticket, metadata, correlation);
+            process(ticket, customerId(ticket, metadata), metadata, correlation);
             publisher.completed(correlation);
             return message.ack();
         } catch (InvalidTicketException | JsonProcessingException e) {
@@ -99,14 +103,35 @@ public class TicketConsumer {
         }
     }
 
+    /**
+     * The customer this ticket is processed for. With {@code CHANNEL}, the gateway's authenticated identity must be
+     * present and match the payload's claim; with {@code PAYLOAD}, the claim is trusted as is.
+     */
+    private String customerId(TicketCreated ticket, IncomingKafkaRecordMetadata<String, String> metadata) {
+        if (configuration.identitySource() == AgentConfiguration.IdentitySource.PAYLOAD) {
+            return ticket.customerId();
+        }
+        String authenticated;
+        try {
+            authenticated = headerPolicy.authenticatedCustomer(metadata.getHeaders());
+        } catch (HeaderPolicy.InvalidHeaderException e) {
+            throw new InvalidTicketException();
+        }
+        if (!authenticated.equals(ticket.customerId())) {
+            throw new InvalidTicketException();
+        }
+        return authenticated;
+    }
+
     private void process(
             TicketCreated ticket,
+            String customerId,
             IncomingKafkaRecordMetadata<String, String> metadata,
             Correlation correlation) {
-        actions.lookupCustomer(correlation, ticket.customerId());
-        CustomerContext customerContext = customers.findPromptContext(ticket.customerId());
+        actions.lookupCustomer(correlation, customerId);
+        CustomerContext customerContext = customers.findPromptContext(customerId);
         Map<String, String> headers = headerPolicy.modelHeaders(metadata.getHeaders());
-        String priorText = policy.retainCrossTicketMemory() ? memory.previous(ticket.customerId()) : "";
+        String priorText = policy.retainCrossTicketMemory() ? memory.previous(customerId) : "";
         TicketAnalysis analysis = analysisValidator.validate(
                 model.analyze(new ModelInput(ticket, customerContext, headers, priorText)));
         Disposition disposition = policy.disposition(analysis);
@@ -130,7 +155,7 @@ public class TicketConsumer {
         // Written after any publication so the recorded disposition reflects what actually happened.
         publisher.triage(correlation, TriageResult.from(ticket, analysis, disposition));
         if (policy.retainCrossTicketMemory()) {
-            memory.remember(ticket.customerId(), ticket.body());
+            memory.remember(customerId, ticket.body());
         }
     }
 

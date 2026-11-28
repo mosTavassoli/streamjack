@@ -12,6 +12,27 @@ public interface AgentConfiguration {
     @WithDefault("HARDENED")
     SecurityMode securityMode();
 
+    @WithDefault("PAYLOAD")
+    IdentitySource identitySource();
+
+    /**
+     * Where the agent takes the customer identity from. It is independent of the security mode, so identity binding
+     * can be tested with cross-ticket memory still enabled.
+     */
+    enum IdentitySource {
+        /**
+         * The {@code customerId} in the event payload. Anyone who can write to the ticket topic can claim any
+         * customer, load that customer's context, and write into that customer's cross-ticket memory.
+         */
+        PAYLOAD,
+        /**
+         * The {@code streamjack-authenticated-customer} header, set by a trusted gateway that authenticated the
+         * customer. It is only trustworthy when Kafka ACLs let no one but the gateway write to the ticket topic. A
+         * ticket without exactly one valid header, or whose payload claims a different customer, is rejected.
+         */
+        CHANNEL
+    }
+
     /**
      * Where model calls go. {@code OLLAMA} and {@code OPENAI} use the chat model selected at build time with
      * {@code quarkus.langchain4j.chat-model.provider}; this setting only switches between the scripted model and that

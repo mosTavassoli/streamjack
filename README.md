@@ -170,6 +170,11 @@ application controls: a duplicated ticket got two follow-up calls without them a
 limitations. The plan documents a Java harness for reproducible runs on Linux, macOS and Windows, including how to
 check the packaged agent against a local mock without an API key or paid calls.
 
+By default, the sample agent takes the customer id from the event payload, so any producer that can write to the
+ticket topic can make the agent load another customer's context into the model input and, when cross-ticket memory
+is enabled, write into that customer's memory, with no model trick involved. See the [customer identity finding](docs/customer-identity-finding.md): set
+`streamjack.agent.identity-source=CHANNEL` and let only a trusted gateway write to the ticket topic.
+
 ## Slow agents and Kafka share groups
 
 With Kafka share groups (queue-style consumption, enabled by default from Kafka 4.2), each record is locked to one consumer for 30 s by default. An agent that takes longer than the lock gets the same event again, up to five times, and its side effects can repeat.

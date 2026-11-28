@@ -41,6 +41,10 @@ public final class PublicationAuthorizationKafkaResource implements QuarkusTestR
     static final String PUBLISHED = "support.published";
     static final String AGENT = "triage-agent";
     static final String PUBLISHER = "fixture-publisher";
+    /** Untrusted producers write only here; the gateway authenticates them and republishes to the ticket topic. */
+    static final String INTAKE = "support.intake";
+    static final String GATEWAY = "ticket-gateway";
+    static final String CUSTOMER_APP = "customer-app";
     private static final String ADMIN = "fixture-admin";
     private static final String GROUP = "streamjack-sample-agent";
     private static final int CLIENT_PORT = 9092;
@@ -48,6 +52,8 @@ public final class PublicationAuthorizationKafkaResource implements QuarkusTestR
     private final String adminPassword = UUID.randomUUID().toString();
     private final String agentPassword = UUID.randomUUID().toString();
     private final String publisherPassword = UUID.randomUUID().toString();
+    private final String gatewayPassword = UUID.randomUUID().toString();
+    private final String customerAppPassword = UUID.randomUUID().toString();
     private AuthorizationBroker kafka;
 
     @Override
@@ -88,6 +94,14 @@ public final class PublicationAuthorizationKafkaResource implements QuarkusTestR
         return producer(PUBLISHER, publisherPassword);
     }
 
+    KafkaProducer<String, String> gatewayProducer() {
+        return producer(GATEWAY, gatewayPassword);
+    }
+
+    KafkaProducer<String, String> customerAppProducer() {
+        return producer(CUSTOMER_APP, customerAppPassword);
+    }
+
     KafkaConsumer<String, String> observer() {
         Map<String, Object> settings = clientSettings(ADMIN, adminPassword);
         settings.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
@@ -126,7 +140,7 @@ public final class PublicationAuthorizationKafkaResource implements QuarkusTestR
 
     private void provision() throws ExecutionException, InterruptedException, TimeoutException {
         try (Admin admin = Admin.create(clientSettings(ADMIN, adminPassword))) {
-            admin.createTopics(List.of(TICKETS, TRIAGE, PUBLISHED, AgentProtocol.AUDIT_TOPIC).stream()
+            admin.createTopics(List.of(TICKETS, TRIAGE, PUBLISHED, INTAKE, AgentProtocol.AUDIT_TOPIC).stream()
                     .map(name -> new NewTopic(name, 1, (short) 1)).toList()).all().get(20, TimeUnit.SECONDS);
             admin.createAcls(List.of(
                     allow(AGENT, ResourceType.TOPIC, TICKETS, AclOperation.READ),
@@ -135,7 +149,11 @@ public final class PublicationAuthorizationKafkaResource implements QuarkusTestR
                     allow(AGENT, ResourceType.TOPIC, AgentProtocol.AUDIT_TOPIC, AclOperation.WRITE),
                     // Let the agent look up the topic so the broker rejects the write itself.
                     allow(AGENT, ResourceType.TOPIC, PUBLISHED, AclOperation.DESCRIBE),
-                    allow(PUBLISHER, ResourceType.TOPIC, PUBLISHED, AclOperation.WRITE)))
+                    allow(PUBLISHER, ResourceType.TOPIC, PUBLISHED, AclOperation.WRITE),
+                    // Identity binding: only the gateway may write tickets; customer apps only reach the intake.
+                    allow(GATEWAY, ResourceType.TOPIC, TICKETS, AclOperation.WRITE),
+                    allow(CUSTOMER_APP, ResourceType.TOPIC, INTAKE, AclOperation.WRITE),
+                    allow(CUSTOMER_APP, ResourceType.TOPIC, TICKETS, AclOperation.DESCRIBE)))
                     .all().get(20, TimeUnit.SECONDS);
         }
     }
@@ -186,7 +204,9 @@ public final class PublicationAuthorizationKafkaResource implements QuarkusTestR
                             "org.apache.kafka.common.security.plain.PlainLoginModule required"
                                     + " user_" + ADMIN + "=\"" + adminPassword + "\""
                                     + " user_" + AGENT + "=\"" + agentPassword + "\""
-                                    + " user_" + PUBLISHER + "=\"" + publisherPassword + "\";")));
+                                    + " user_" + PUBLISHER + "=\"" + publisherPassword + "\""
+                                    + " user_" + GATEWAY + "=\"" + gatewayPassword + "\""
+                                    + " user_" + CUSTOMER_APP + "=\"" + customerAppPassword + "\";")));
             withCommand("sh", "-c", "while [ ! -f " + START + " ]; do sleep 0.1; done; exec sh " + START);
             waitingFor(Wait.forLogMessage(".*Transitioning from RECOVERY to RUNNING.*", 1)
                     .withStartupTimeout(Duration.ofSeconds(60)));

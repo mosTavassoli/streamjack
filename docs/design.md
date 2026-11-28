@@ -79,6 +79,8 @@ The runner owns its three reserved correlation headers. Scenarios cannot set the
 
 The hardened sample minimizes model-visible customer data, excludes arbitrary Kafka headers and cross-ticket text, validates structured model output, and makes the publication decision outside the model. Prompt instructions are defense in depth, not authorization.
 
+The sample agent's customer identity is configured separately from the security mode with `streamjack.agent.identity-source`. The default, `PAYLOAD`, trusts the payload's `customerId`. With `CHANNEL`, the agent requires exactly one `streamjack-authenticated-customer` header matching `C-` followed by 1 to 12 digits, rejects the ticket if it is missing, repeated, malformed, or different from the payload's claim, and never passes it to the model. The header is trustworthy only when ACLs let a single gateway principal write to the ticket topic and that gateway derives the identity from an independently authenticated customer. This is a sample-agent convention, not a runner-reserved header, and does not change the versioned scenario or report format. See the [customer identity finding](customer-identity-finding.md).
+
 ## Kafka execution protocol
 
 ### Input headers

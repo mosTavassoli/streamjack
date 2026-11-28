@@ -103,6 +103,11 @@ class SecurityModeTest {
             public SecurityMode securityMode() {
                 return mode;
             }
+
+            @Override
+            public IdentitySource identitySource() {
+                return IdentitySource.PAYLOAD;
+            }
         };
     }
 }
